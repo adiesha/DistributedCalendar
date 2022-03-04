@@ -15,6 +15,12 @@ class Client():
         if typeReq == 1:
             request = {"req": "1"}
             return request
+        elif typeReq == 2:
+            request = {"req": "2", "seq": str(self.seq), "port": str(self.clientPort)}
+            return request
+        elif typeReq == 3:
+            request = {"req": "3", "seq": str(self.seq)}
+            return request
         else:
             return ""
 
@@ -26,7 +32,7 @@ class Client():
         jr = json.loads(input)
         return jr
 
-    def main(self):
+    def initializeTheNode(self):
         # establish connection with server and give info about the client port
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.connect((self.HOST, self.SERVER_PORT))
@@ -40,6 +46,42 @@ class Client():
 
             self.seq = resp['seq']
             print("sequence: " + self.seq)
+            s.close()
+
+    def sendNodePort(self):
+        # establish connection with server and give info about the client port
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.connect((self.HOST, self.SERVER_PORT))
+            strReq = self.createJSONReq(2)
+            jsonReq = json.dumps(strReq)
+
+            s.sendall(str.encode(jsonReq))
+
+            data = self.receiveWhole(s)
+            resp = self.getJsonObj(data.decode("utf-8"))
+
+            print(resp['response'])
+            s.close()
+
+
+    def getMapData(self):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.connect((self.HOST, self.SERVER_PORT))
+            strReq = self.createJSONReq(3)
+            jsonReq = json.dumps(strReq)
+
+            s.sendall(str.encode(jsonReq))
+
+            data = self.receiveWhole(s)
+            resp = self.getJsonObj(data.decode("utf-8"))
+
+            print(resp)
+            s.close()
+
+    def main(self):
+        self.initializeTheNode()
+        self.sendNodePort()
+        self.getMapData()
 
 
 if __name__ == '__main__':

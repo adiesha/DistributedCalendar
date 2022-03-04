@@ -1,5 +1,6 @@
 import json
 import socket
+import time
 from threading import Lock
 
 
@@ -37,6 +38,7 @@ class Server():
                 conn, addr = s.accept()
                 with conn:
                     print(f"Connected by {addr}")
+                    time.sleep(2)
                     while True:
                         data = self.receiveWhole(conn)
                         if data == b'':
@@ -48,6 +50,19 @@ class Server():
                             x = {"seq": str(temp)}
                             y = json.dumps(x)
                             print(y)
+                            conn.sendall(str.encode(y))
+                        if reqType == "2":
+                            self.map[jsonreq['seq']] = jsonreq['port']
+
+                            # create response
+                            x = {"response": "success"}
+                            y = json.dumps(x)
+                            print(y)
+                            print(self.map)
+                            conn.sendall(str.encode(y))
+                        if reqType == "3":
+                            print("Request from {0} for node data".format(jsonreq['seq']))
+                            y = json.dumps(self.map)
                             conn.sendall(str.encode(y))
 
 
