@@ -1,6 +1,7 @@
 # echo-client.py
 import json
 import socket
+import sys
 
 
 class Client():
@@ -63,7 +64,6 @@ class Client():
             print(resp['response'])
             s.close()
 
-
     def getMapData(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.connect((self.HOST, self.SERVER_PORT))
@@ -78,10 +78,26 @@ class Client():
             print(resp)
             s.close()
 
+    def createThreadToListen(self):
+        pass
+
+    def menu(self):
+        pass
+
     def main(self):
+        print('Number of arguments:', len(sys.argv), 'arguments.')
+        print('Argument List:', str(sys.argv))
+
+        if len(sys.argv) > 1:
+            print("Client's listening port {0}".format(sys.argv[1]))
+            self.clientPort = sys.argv[1]
+
         self.initializeTheNode()
         self.sendNodePort()
+        # need to put following inside the menu
         self.getMapData()
+        self.createThreadToListen()
+        self.menu()
 
 
 if __name__ == '__main__':
