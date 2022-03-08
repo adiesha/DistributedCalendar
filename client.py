@@ -16,6 +16,7 @@ class Client():
         self.SERVER_PORT = 65431  # The port used by the server
         self.clientPort = clientPort
         self.seq = None
+        self.map = None
 
     def createJSONReq(self, typeReq):
         if typeReq == 1:
@@ -26,6 +27,9 @@ class Client():
             return request
         elif typeReq == 3:
             request = {"req": "3", "seq": str(self.seq)}
+            return request
+        elif typeReq == 4:
+            request = {"req": "4", "seq": str(self.seq), "event": "Make appointment"}
             return request
         else:
             return ""
@@ -98,32 +102,46 @@ class Client():
                         data = self.receiveWhole(conn)
                         if data == b'':
                             break
-                        map = self.getJsonObj(data.decode("utf-8"))
-                        self.map = map
-                        print("Received Map: ", map)
+                        self.map = self.getJsonObj(data.decode("utf-8"))
+                        print("Received Map: ", self.map)
 
     def createThreadToListen(self):
         thread = threading.Thread(target=self.process)
         thread.daemon = True
         thread.start()
 
+    def broadcast(self, event):
+        for key, value in self.map.items():
+            if value != self.clientPort:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.connect((self.HOST, int(value)))
+                    strReq = self.createJSONReq(event)
+                    jsonReq = json.dumps(strReq)
+                    s.sendall(str.encode(jsonReq))
+                    s.close()
 
-    def menu(self, map):
+    def createThreadToBroadcast(self, event):
+        thread = threading.Thread(target=self.broadcast(event))
+        thread.daemon = True
+        thread.start()
+
+    def menu(self):
         while True:
             print ("Display Calender\t[d]")
-            print ("Make appointment\t[m]")
+            print ("Make Appointment\t[m]")
             print ("Cancel Appointment\t[c]")
-            print ("Quit[q]")
+            print ("Quit    \t[q]")
 
             resp = input("Choice: ").lower()
             if resp == 'd':
-                pass
+                print("Display Calender")
             elif resp == 'm':
-                pass
+                print("Make Appointment")
+                self.createThreadToBroadcast(4)
             elif resp == 'c':
-                pass
+                print("Cancel Appointment")
             elif resp == 'q':
-                pass
+                print("Quitting")
 
     def main(self):
         print('Number of arguments:', len(sys.argv), 'arguments.')
@@ -137,8 +155,8 @@ class Client():
         self.sendNodePort()
         # need to put following inside the menu
         self.createThreadToListen()
-        map = self.getMapData()
-        self.menu(map)
+        self.map = self.getMapData()
+        self.menu()
 
 
 if __name__ == '__main__':
