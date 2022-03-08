@@ -1,10 +1,11 @@
 # echo-client.py
 import json
-from re import S
 import select
 import socket
 import sys
 import threading
+
+from DistributedDict import DistributedDict
 
 
 class Client():
@@ -99,7 +100,7 @@ class Client():
                         rxset.append(conn)
                         print ('Connection from address:', addr)
                     else:
-                        try:
+                        try: 
                             data = sock.recv(1024)
                             if data == ";" :
                                 print("Received all the data")
@@ -123,7 +124,7 @@ class Client():
         thread.start()
 
 
-    def menu(self):
+    def menu(self, map):
         while True:
             print ("Display Calender\t[d]")
             print ("Make appointment\t[m]")
@@ -152,9 +153,8 @@ class Client():
         self.sendNodePort()
         # need to put following inside the menu
         map = self.getMapData()
-        sockets = list(map.values())
         self.createThreadToListen()
-        self.menu()
+        self.menu(map)
 
 
 if __name__ == '__main__':
