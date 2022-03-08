@@ -1,11 +1,11 @@
 # echo-client.py
 import json
-import select
 import socket
 import sys
 import time
 import threading
 
+from DistributedLog import DistributedLog
 from DistributedDict import DistributedDict
 
 
@@ -18,7 +18,7 @@ class Client():
         self.seq = None
         self.map = None
 
-    def createJSONReq(self, typeReq):
+    def createJSONReq(self, typeReq, nodes = None, slot = None):
         if typeReq == 1:
             request = {"req": "1"}
             return request
@@ -29,7 +29,7 @@ class Client():
             request = {"req": "3", "seq": str(self.seq)}
             return request
         elif typeReq == 4:
-            request = {"req": "4", "seq": str(self.seq), "event": "Make appointment"}
+            request = {"req": "4", "seq": str(self.seq), "node": str(nodes), "slot": str(slot)}
             return request
         else:
             return ""
@@ -102,43 +102,49 @@ class Client():
                         data = self.receiveWhole(conn)
                         if data == b'':
                             break
-                        self.map = self.getJsonObj(data.decode("utf-8"))
-                        print("Received Map: ", self.map)
+                        message = self.getJsonObj(data.decode("utf-8"))
+                        if list(message.keys())[0] == "req":
+                            event = message
+                            print("Message received: ", message)
+                        else:
+                            self.map =  message
+                            print("Updated Map: ", self.map)
 
     def createThreadToListen(self):
         thread = threading.Thread(target=self.process)
         thread.daemon = True
         thread.start()
 
-    def broadcast(self, event):
-        for key, value in self.map.items():
-            if value != self.clientPort:
-                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                    s.connect((self.HOST, int(value)))
-                    strReq = self.createJSONReq(event)
-                    jsonReq = json.dumps(strReq)
-                    s.sendall(str.encode(jsonReq))
-                    s.close()
+    def broadcast(self, event, nodes, slot):
+        for node in nodes:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.connect((self.HOST, int(self.map[node])))
+                strReq = self.createJSONReq(event, node, slot)
+                jsonReq = json.dumps(strReq)
+                s.sendall(str.encode(jsonReq))
+                s.close()
 
-    def createThreadToBroadcast(self, event):
-        thread = threading.Thread(target=self.broadcast(event))
+    def createThreadToBroadcast(self, event, nodes, slot):
+        thread = threading.Thread(target=self.broadcast(event, nodes, slot))
         thread.daemon = True
         thread.start()
 
     def menu(self):
         while True:
             print ("Display Calender\t[d]")
-            print ("Make Appointment\t[m]")
-            print ("Cancel Appointment\t[c]")
+            # Make an appoint with node 2 for slot 2: m 2 2
+            # Make an appoint with node 1,2 and 3 for slot 2: m 1,2,3 2
+            print ("Make Appointment\t[m <node/s> <slot>]")
+            print ("Cancel Appointment\t[c <node/s> <slot>]")
             print ("Quit    \t[q]")
 
-            resp = input("Choice: ").lower()
-            if resp == 'd':
+            resp = input("Choice: ").lower().split()
+            if resp[0] == 'd':
                 print("Display Calender")
-            elif resp == 'm':
-                print("Make Appointment")
-                self.createThreadToBroadcast(4)
-            elif resp == 'c':
+            elif resp[0] == 'm':
+                nodes = resp[1].split(",")
+                self.createThreadToBroadcast(4, nodes, resp[2])
+            elif resp[0] == 'c':
                 print("Cancel Appointment")
             elif resp == 'q':
                 print("Quitting")
