@@ -1,7 +1,10 @@
 # echo-client.py
 import json
+from re import S
+import select
 import socket
 import sys
+import threading
 
 
 class Client():
@@ -77,12 +80,65 @@ class Client():
 
             print(resp)
             s.close()
+            return resp
+
+
+    def process(self):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind((self.HOST,int(self.clientPort)))
+            s.listen(1)
+            rxset = [s]
+            txset = []
+
+            while 1:
+                rxfds, txfds, exfds = select.select(rxset, txset, rxset)
+                for sock in rxfds:
+                    if sock is s:
+                        conn, addr = s.accept()
+                        conn.setblocking(0)
+                        rxset.append(conn)
+                        print ('Connection from address:', addr)
+                    else:
+                        try:
+                            data = sock.recv(1024)
+                            if data == ";" :
+                                print("Received all the data")
+                                for x in param:
+                                    print(x)
+                                param = []
+                                rxset.remove(sock)
+                                sock.close()
+                            else:
+                                print ("received data: ", data)
+                                param.append(data)
+                        except:
+                            print ("Connection closed by remote end")
+                            param = []
+                            rxset.remove(sock)
+                            sock.close()
 
     def createThreadToListen(self):
-        pass
+        thread = threading.Thread(target=self.process)
+        thread.daemon = True
+        thread.start()
+
 
     def menu(self):
-        pass
+        while True:
+            print ("Display Calender\t[d]")
+            print ("Make appointment\t[m]")
+            print ("Cancel Appointment\t[c]")
+            print ("Quit[q]")
+
+            resp = input("Choice: ").lower()
+            if resp == 'd':
+                pass
+            elif resp == 'm':
+                pass
+            elif resp == 'c':
+                pass
+            elif resp == 'q':
+                pass
 
     def main(self):
         print('Number of arguments:', len(sys.argv), 'arguments.')
@@ -95,7 +151,8 @@ class Client():
         self.initializeTheNode()
         self.sendNodePort()
         # need to put following inside the menu
-        self.getMapData()
+        map = self.getMapData()
+        sockets = list(map.values())
         self.createThreadToListen()
         self.menu()
 
