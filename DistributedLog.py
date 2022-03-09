@@ -22,39 +22,43 @@ class DistributedLog:
                 s.listen()
                 conn, addr = s.accept()
                 with conn:
-                    print(f"Connected by {addr}")
-                    while True:
-                        data = self.receiveWhole(conn)
-                        if data == b'':
-                            break
-                        unpickledRequest = pickle.loads(data)
-                        print(unpickledRequest)
-                        if isinstance(unpickledRequest, dict):
-                            # join the partial log
-                            pl = unpickledRequest['pl']
-                            self.unionevents(pl)
-                            # make sure logging is done when events unioned
+                    self.mutex.acquire()
+                    try:
+                        print(f"Connected by {addr}")
+                        while True:
+                            data = self.receiveWhole(conn)
+                            if data == b'':
+                                break
+                            unpickledRequest = pickle.loads(data)
+                            print(unpickledRequest)
+                            if isinstance(unpickledRequest, dict):
+                                # join the partial log
+                                pl = unpickledRequest['pl']
+                                self.unionevents(pl)
+                                # make sure logging is done when events unioned
 
-                            # update the lamport time and create receive event
-                            receivedTs = unpickledRequest['ts']
-                            receivedMatrix = unpickledRequest['T']
-                            self.addReceiveEvent(receivedTs)
-                            self.updateMatrixFromReceivedMatrix(receivedMatrix, receivedTs[0])
+                                # update the lamport time and create receive event
+                                receivedTs = unpickledRequest['ts']
+                                receivedMatrix = unpickledRequest['T']
+                                self.addReceiveEvent(receivedTs)
+                                self.updateMatrixFromReceivedMatrix(receivedMatrix, receivedTs[0])
 
-                            # create message receive event
-                            # send the message success request
-                            response = {"response": "Success"}
-                            the_encoding = chardet.detect(pickle.dumps(response))['encoding']
-                            response['encoding'] = the_encoding
-                            pickledMessage = pickle.dumps(response)
-                            conn.sendall(pickledMessage)
+                                # create message receive event
+                                # send the message success request
+                                response = {"response": "Success"}
+                                the_encoding = chardet.detect(pickle.dumps(response))['encoding']
+                                response['encoding'] = the_encoding
+                                pickledMessage = pickle.dumps(response)
+                                conn.sendall(pickledMessage)
 
-                        else:
-                            response = {"response": "Failed", "error": "Request should be a dictionary"}
-                            the_encoding = chardet.detect(pickle.dumps(response))['encoding']
-                            response['encoding'] = the_encoding
-                            pickledMessage = pickle.dumps(response)
-                            conn.sendall(pickledMessage)
+                            else:
+                                response = {"response": "Failed", "error": "Request should be a dictionary"}
+                                the_encoding = chardet.detect(pickle.dumps(response))['encoding']
+                                response['encoding'] = the_encoding
+                                pickledMessage = pickle.dumps(response)
+                                conn.sendall(pickledMessage)
+                    finally:
+                        self.mutex.release()
 
     def __init__(self, clientport, nodeid, nodemap, eventClass=None, host="127.0.0.1"):
         self.HOST = host
@@ -66,8 +70,8 @@ class DistributedLog:
         self.noOfNodes = len(nodemap)
         self.matrix = np.zeros((self.noOfNodes, self.noOfNodes), dtype=np.int32)
         self._terminate = False
-        logging.basicConfig(level=logging.DEBUG, format='%(message)s')
-        logging.info("haha")
+        # logging.basicConfig(level=logging.DEBUG, format='%(message)s')
+        # logging.info("haha")
         if eventClass is None:
             self.eventClass = Event
         else:
@@ -205,6 +209,7 @@ class Event:
         print(type(self.id))
         self.nodeId = nodeid
         self.ts = timestamp
+        self._op = None
 
     def __hash__(self):
         return hash(self.id)
@@ -215,7 +220,7 @@ class Event:
         return False
 
     def __str__(self):
-        return "Event Hash: {0} Node:{1} Timestamp: {2}".format(self.id, self.nodeId, self.ts)
+        return "Event Hash: {0} Node:{1} Timestamp: {2} Op: {3}".format(self.id, self.nodeId, self.ts, self._op)
 
 
 # test class for hashing in set
