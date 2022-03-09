@@ -60,7 +60,6 @@ class DistributedLog:
                     finally:
                         self.mutex.release()
 
-
     def __init__(self, clientport, nodeid, nodemap, eventClass=None, host="127.0.0.1"):
         self.HOST = host
         self.port = clientport
@@ -210,6 +209,7 @@ class Event:
         print(type(self.id))
         self.nodeId = nodeid
         self.ts = timestamp
+        self._op = None
 
     def __hash__(self):
         return hash(self.id)
@@ -220,7 +220,7 @@ class Event:
         return False
 
     def __str__(self):
-        return "Event Hash: {0} Node:{1} Timestamp: {2}".format(self.id, self.nodeId, self.ts)
+        return "Event Hash: {0} Node:{1} Timestamp: {2} Op: {3}".format(self.id, self.nodeId, self.ts, self._op)
 
 
 # test class for hashing in set
