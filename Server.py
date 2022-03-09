@@ -1,7 +1,7 @@
 import json
 import socket
 import time
-from threading import Lock
+import threading
 
 
 class Server():
@@ -9,7 +9,7 @@ class Server():
     def __init__(self):
         self.HOST = "127.0.0.1"  # Standard loopback interface address (localhost)
         self.PORT = 65431  # Port to listen on (non-privileged ports are > 1023)
-        self.mutex = Lock()
+        self.mutex = threading.Lock()
         self.seq = 0
         self.map = {}
 
@@ -29,6 +29,19 @@ class Server():
     def getJsonObj(self, bytestr):
         jr = json.loads(bytestr.decode("utf-8"))
         return jr
+
+    def sendNewMap(self):
+        thread = threading.Thread(target=self.sendMap)
+        thread.daemon = True
+        thread.start()
+
+    def sendMap(self,):        
+        for key, value in self.map.items():
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.connect((self.HOST, int(value)))
+                y = json.dumps(self.map)
+                s.sendall(str.encode(y))
+                s.close()
 
     def main(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -61,9 +74,11 @@ class Server():
                             print(self.map)
                             conn.sendall(str.encode(y))
                         if reqType == "3":
-                            print("Request from {0} for node data".format(jsonreq['seq']))
+                            # print("Request from {0} for node data".format(jsonreq['seq']))
                             y = json.dumps(self.map)
                             conn.sendall(str.encode(y))
+                            print("New node {0} added".format(jsonreq['seq']))
+                            self.sendNewMap()
 
 
 if __name__ == '__main__':
