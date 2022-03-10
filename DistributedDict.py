@@ -86,7 +86,7 @@ class DistributedDict:
         self.unionevents(pl)
         for ev in self.events.copy():
             needArecord = False
-            for j in range(self.noOfNodes):
+            for j in range(1, self.noOfNodes + 1):
                 if not self.hasRecord(self.matrix, ev, j):
                     needArecord = True
                     break
@@ -142,6 +142,20 @@ class DistributedDict:
             print(key, ' : ', value)
 
     def addAppointment(self, message):
+        # Todo: implement the add appointment logic here
+        # create the appointment
+
+        timeslot = message[0]
+        scheduler = message[1]
+        participants = message[2]
+        appnmnt = Appointment()
+        appnmnt.timeslot = timeslot
+        appnmnt.scheduler = scheduler
+        appnmnt.participants = participants
+
+        # check for conflicts
+        # if any of the participants are already in one of the appointments in that timesolt return false
+
         pass
 
     def cancelAppointment(self, message):
@@ -149,3 +163,20 @@ class DistributedDict:
 
     def updateDict(self, partial_log):
         pass
+
+
+class Appointment:
+    def __init__(self):
+        self.timeslot = None
+        self.scheduler = None
+        self.participants = []
+
+    def isParticipant(self, participant):
+        return participant in self.participants
+
+    def isScheduler(self, schedulerperson):
+        return self.scheduler == schedulerperson
+
+    def __str__(self):
+        return "Timeslot: {0} scheduled by: {1} participants {2)".format(self.timeslot, self.scheduler,
+                                                                         self.participants)
