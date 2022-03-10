@@ -4,6 +4,7 @@ import random
 import socket
 import threading
 import time
+from enum import Enum
 from threading import Lock
 
 import chardet
@@ -194,6 +195,7 @@ class DistributedLog:
         for e in pl:
             if not self.hasRecord(self.matrix, e, self.nodeid):
                 NE.append(e)
+        return NE
 
 
 
@@ -208,6 +210,7 @@ class Event:
         self.nodeId = nodeid
         self.ts = timestamp
         self._op = None
+        self._m = None
 
     def __hash__(self):
         return hash(self.id)
@@ -220,6 +223,10 @@ class Event:
     def __str__(self):
         return "Event Hash: {0} Node:{1} Timestamp: {2} Op: {3}".format(self.id, self.nodeId, self.ts, self._op)
 
+
+class Operation(Enum):
+    INSERT = 1
+    DELETE = 2
 
 # test class for hashing in set
 class Apple:
