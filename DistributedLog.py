@@ -1,12 +1,10 @@
 import hashlib
-import json
 import pickle
 import random
 import socket
 import threading
 import time
 from threading import Lock
-import logging
 
 import chardet
 import numpy as np
@@ -103,10 +101,15 @@ class DistributedLog:
             self.mutex.release()
         return lamptime, event
 
-    def receiveMessage(self):
+    def update(self, pl, receivedTs, receivedMatrix):
         self.mutex.acquire()
         try:
-            print("somethig")
+            self.unionevents(pl)
+            # make sure logging is done when events unioned
+
+            # update the lamport time and create receive event
+            # self.addReceiveEvent(receivedTs)
+            self.updateMatrixFromReceivedMatrix(receivedMatrix, receivedTs[0])
         finally:
             self.mutex.release()
 
@@ -120,18 +123,6 @@ class DistributedLog:
                 # either 0 or end of data
                 break
         return data
-
-    def getJsonObj(self, input):
-        jr = json.loads(input)
-        return jr
-
-    def createJSONReq(self, typeReq):
-        if typeReq == 4:
-            request = {"req": "4", "msg": "Not implemented"}
-            return request
-
-        else:
-            return ""
 
     def printEvents(self):
         for s in self.events:
@@ -197,6 +188,13 @@ class DistributedLog:
         for m in range(size):
             for n in range(size):
                 self.matrix[m][n] = max(receivedMatrix[m][n], self.matrix[m][n])
+
+    def calculateNE(self, pl):
+        NE = []
+        for e in pl:
+            if not self.hasRecord(self.matrix, e, self.nodeid):
+                NE.append(e)
+
 
 
 class Event:
