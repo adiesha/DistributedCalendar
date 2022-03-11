@@ -6,7 +6,6 @@ import time
 import numpy as np
 
 
-
 class DistributedDict:
     def __init__(self, clientport, nodeid, nodemap, host="127.0.0.1", eventClass=None):
         self.HOST = host
@@ -34,7 +33,7 @@ class DistributedDict:
             event._op = 1
             event._m = slot
             self.log.add(event)
-            self.calendar[slot] = nodes
+            # self.calendar[slot] = nodes
         finally:
             self.mutex.release()
         pass
@@ -48,7 +47,7 @@ class DistributedDict:
             event._op = 2
             event._m = slot
             self.log.add(event)
-            r = self.calendar.pop(slot, None)
+            # r = self.calendar.pop(slot, None)
             pass
         finally:
             self.mutex.release()

@@ -4,6 +4,7 @@ import socket
 import sys
 import time
 import threading
+import pickle
 
 from DistributedDict import DistributedDict
 
@@ -16,8 +17,9 @@ class Client():
         self.clientPort = clientPort
         self.seq = None
         self.map = None
+        self.dict_obj = None
 
-    def createJSONReq(self, typeReq, nodes = None, slot = None):
+    def createJSONReq(self, typeReq, nodes = None, message= None):
         # Initialize node
         if typeReq == 1:
             request = {"req": "1"}
@@ -29,14 +31,6 @@ class Client():
         # Get map data
         elif typeReq == 3:
             request = {"req": "3", "seq": str(self.seq)}
-            return request
-        # Make Appointment
-        elif typeReq == 4:
-            request = {"req": "4", "seq": str(self.seq), "node": str(nodes), "slot": str(slot)}
-            return request
-        # Cancel Appointment
-        elif typeReq == 5:
-            request = {"req": "5", "seq": str(self.seq), "node": str(nodes), "slot": str(slot)}
             return request
         else:
             return ""
@@ -105,14 +99,16 @@ class Client():
                     time.sleep(2)
                     while True:
                         data = self.receiveWhole(conn)
+                        map = True
                         if data == b'':
                             break
-                        message = self.getJsonObj(data.decode("utf-8"))
-                        if list(message.keys())[0] == "req":
-                            event = message
+                        try:
+                            message = pickle.loads(data[10:])
                             print("Message received: ", message)
-                        else:
-                            self.map =  message
+                            self.dict_obj.receiveMessage(message)
+                        except pickle.UnpicklingError:
+                            json = self.getJsonObj(data.decode("utf-8"))
+                            self.map =  json
                             print("Updated Map: ", self.map)
 
     def createThreadToListen(self):
@@ -120,21 +116,22 @@ class Client():
         thread.daemon = True
         thread.start()
 
-    def send(self, event, nodes, slot):
+    def send(self, event, nodes):
         for node in nodes:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.connect((self.HOST, int(self.map[node])))
-                strReq = self.createJSONReq(event, node, slot)
-                jsonReq = json.dumps(strReq)
-                s.sendall(str.encode(jsonReq))
+                partiallog, matrix = self.dict_obj.sendMessage(int(node))
+                message = pickle.dumps([partiallog, matrix, int(node)])
+                message = bytes(f"{len(message):<{10}}", 'utf-8')+message
+                s.sendall(message)
                 s.close()
 
-    def createThreadToSend(self, event, nodes, slot):
-        thread = threading.Thread(target=self.send(event, nodes, slot))
+    def createThreadToSend(self, event, nodes):
+        thread = threading.Thread(target=self.send(event,nodes))
         thread.daemon = True
         thread.start()
 
-    def menu(self, d):
+    def menu(self):
         while True:
             print ("Display Calender\t[d]")
             # Make an appoint with node 2 for slot 2: m 2 2
@@ -152,14 +149,12 @@ class Client():
                     # d.displayCalendar()
                 elif resp[0] == 'm':
                     nodes = resp[1].split(",")
-                    d.insert(nodes, resp[2])
-                    partiallog, matrix = d.sendMessage()
-                    self.createThreadToSend(4, nodes, int(resp[2]))
+                    self.dict_obj.insert(nodes, resp[2])
+                    self.createThreadToSend(4, nodes)
                 elif resp[0] == 'c':
                     nodes = resp[1].split(",") 
-                    d.delete(nodes, resp[2])
-                    partiallog, matrix = d.sendMessage()             
-                    self.createThreadToSend(5, nodes, int(resp[2]))
+                    self.dict_obj.delete(nodes, resp[2])        
+                    self.createThreadToSend(5, nodes)
                 elif resp == 'q':
                     print("Quitting")
                     break
@@ -174,8 +169,8 @@ class Client():
         # need to put following inside the menu
         self.createThreadToListen()
         self.map = self.getMapData()
-        d = DistributedDict(self.clientPort, int(self.seq), self.map)
-        self.menu(d)
+        self.dict_obj = DistributedDict(int(self.clientPort), int(self.seq), self.map)
+        self.menu()
 
 
 if __name__ == '__main__':
