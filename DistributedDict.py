@@ -33,7 +33,7 @@ class DistributedDict:
             event._op = 1
             event._m = slot
             self.log.add(event)
-            # self.calendar[slot] = nodes
+            self.calendar[slot] = nodes
         finally:
             self.mutex.release()
         pass
@@ -47,7 +47,7 @@ class DistributedDict:
             event._op = 2
             event._m = slot
             self.log.add(event)
-            # r = self.calendar.pop(slot, None)
+            self.calendar.pop(slot, None)
             pass
         finally:
             self.mutex.release()
@@ -64,18 +64,18 @@ class DistributedDict:
         NE = self.calculateNE(pl)
 
         tempCreateKeyList = {}
-        tempDeleteKeyLsit = {}
+        tempDeleteKeyList = {}
         for e in NE:
             if e._op == 1:
-                tempCreateKeyList[e._m[0]] = e
+                tempCreateKeyList[e._m] = e
             elif e._op == 2:
-                tempDeleteKeyLsit[e._m[0]] = e
+                tempDeleteKeyList[e._m] = e
 
-        # for ck in tempCreateKeyList:
-        #     if ck not in tempDeleteKeyLsit:
-        #         self.calendar[ck] = tempCreateKeyList[ck]._m[1]
+        for ck in tempCreateKeyList:
+            if ck not in tempDeleteKeyList:
+                self.calendar[ck] = tempCreateKeyList[ck].nodes
 
-        for dk in tempDeleteKeyLsit:
+        for dk in tempDeleteKeyList:
             if dk not in tempCreateKeyList:
                 if dk not in self.calendar:
                     print("Delete key not in calandar Error {0}".format(dk))

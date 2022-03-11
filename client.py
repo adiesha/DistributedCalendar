@@ -142,23 +142,20 @@ class Client():
             print ("Quit    \t[q]")
 
             resp = input("Choice: ").lower().split()
-            if int(resp[2]) > 10:
-                print("Please enter a slot between 1 & 10")
-            else:
-                if resp[0] == 'd':
-                    print("Display Calender")
-                    # d.displayCalendar()
-                elif resp[0] == 'm':
-                    nodes = resp[1].split(",")
-                    self.dict_obj.insert(nodes, resp[2])
-                    self.createThreadToSend(4, nodes)
-                elif resp[0] == 'c':
-                    nodes = resp[1].split(",") 
-                    self.dict_obj.delete(nodes, resp[2])        
-                    self.createThreadToSend(5, nodes)
-                elif resp == 'q':
-                    print("Quitting")
-                    break
+            if resp[0] == 'd':
+                print("Display Calendar")
+                self.dict_obj.displayCalendar()
+            elif resp[0] == 'm':
+                nodes = resp[1].split(",")
+                self.dict_obj.insert(nodes, resp[2])
+                self.createThreadToSend(4, nodes)
+            elif resp[0] == 'c':
+                nodes = resp[1].split(",") 
+                self.dict_obj.delete(nodes, resp[2])        
+                self.createThreadToSend(5, nodes)
+            elif resp == 'q':
+                print("Quitting")
+                break
 
     def main(self):
         if len(sys.argv) > 1:
