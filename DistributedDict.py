@@ -27,6 +27,8 @@ class DistributedDict:
         # x should be a key value pair
         self.mutex.acquire()
         nodes = [int(item) for item in nodes]
+        if self.nodeid not in nodes:
+            nodes.append(self.nodeid)
         try:
             nodeid, lamptime = self.getNewLamportTimestamp()
             event = Event(nodes, self.nodeid, (nodeid, lamptime))
@@ -34,6 +36,7 @@ class DistributedDict:
             event._m = slot
             self.log.add(event)
             self.calendar[slot] = nodes
+            # self.updateDict([event])
         finally:
             self.mutex.release()
         pass
@@ -41,6 +44,8 @@ class DistributedDict:
     def delete(self, nodes, slot):
         self.mutex.acquire()
         nodes = [int(item) for item in nodes]
+        if self.nodeid not in nodes:
+            nodes.append(self.nodeid)
         try:
             nodeid, lamptime = self.getNewLamportTimestamp()
             event = Event(nodes, self.nodeid, (nodeid, lamptime))
@@ -48,7 +53,7 @@ class DistributedDict:
             event._m = slot
             self.log.add(event)
             self.calendar.pop(slot, None)
-            pass
+            # self.updateDict([event])
         finally:
             self.mutex.release()
 
@@ -62,6 +67,20 @@ class DistributedDict:
         matrix = m[1]
         k = m[2]
         NE = self.calculateNE(pl)
+
+        # merge the partial logs
+        self.updateMatrixFromReceivedMatrix(matrix, k)
+        self.unionevents(pl)
+        for ev in self.log.copy():
+            needArecord = False
+            for j in range(1, self.noOfNodes + 1):
+                if not self.hasRecord(self.matrix, ev, j):
+                    needArecord = True
+                    break
+            if needArecord:
+                pass
+            else:
+                self.log.remove(ev)
 
         tempCreateKeyList = {}
         tempDeleteKeyList = {}
@@ -80,20 +99,6 @@ class DistributedDict:
                 if dk not in self.calendar:
                     print("Delete key not in calandar Error {0}".format(dk))
                 self.calendar.pop(dk, None)
-
-        # merge the partial logs
-        self.updateMatrixFromReceivedMatrix(matrix, k)
-        self.unionevents(pl)
-        for ev in self.log.copy():
-            needArecord = False
-            for j in range(1, self.noOfNodes + 1):
-                if not self.hasRecord(self.matrix, ev, j):
-                    needArecord = True
-                    break
-            if needArecord:
-                pass
-            else:
-                self.log.remove(ev)
 
     def unionevents(self, pl):
         for e in pl:
@@ -165,7 +170,7 @@ class DistributedDict:
     def cancelAppointment(self, message):
         pass
 
-    def updateDict(self, partial_log):
+    def updateDict(self, events):
         pass
 
 

@@ -117,18 +117,21 @@ class Client():
         thread.daemon = True
         thread.start()
 
-    def send(self, event, nodes):
+    def send(self, nodes):
+        if self.seq not in nodes:
+            nodes.append(self.seq)
         for node in nodes:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.connect((self.HOST, int(self.map[node])))
-                partiallog, matrix = self.dict_obj.sendMessage(int(node))
-                message = pickle.dumps([partiallog, matrix, int(node)])
-                message = bytes(f"{len(message):<{10}}", 'utf-8')+message
-                s.sendall(message)
-                s.close()
+            if node != self.seq:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.connect((self.HOST, int(self.map[node])))
+                    partiallog, matrix = self.dict_obj.sendMessage(int(node))
+                    message = pickle.dumps([partiallog, matrix, int(node)])
+                    message = bytes(f"{len(message):<{10}}", 'utf-8')+message
+                    s.sendall(message)
+                    s.close()
 
-    def createThreadToSend(self, event, nodes):
-        thread = threading.Thread(target=self.send(event,nodes))
+    def createThreadToSend(self,nodes):
+        thread = threading.Thread(target=self.send(nodes))
         thread.daemon = True
         thread.start()
 
@@ -148,11 +151,11 @@ class Client():
             elif resp[0] == 'm':
                 nodes = resp[1].split(",")
                 self.dict_obj.insert(nodes, resp[2])
-                self.createThreadToSend(4, nodes)
+                self.createThreadToSend(nodes)
             elif resp[0] == 'c':
                 nodes = resp[1].split(",") 
                 self.dict_obj.delete(nodes, resp[2])        
-                self.createThreadToSend(5, nodes)
+                self.createThreadToSend(nodes)
             elif resp == 'q':
                 print("Quitting")
                 break
@@ -164,7 +167,6 @@ class Client():
         
         self.initializeTheNode()
         self.sendNodePort()
-        # need to put following inside the menu
         self.createThreadToListen()
         self.map = self.getMapData()
         self.dict_obj = DistributedDict(int(self.clientPort), int(self.seq), self.map)
