@@ -110,6 +110,7 @@ class Client():
                             json = self.getJsonObj(data.decode("utf-8"))
                             self.map =  json
                             print("Updated Map: ", self.map)
+                            self.dict_obj.update_matrix(len(self.map))
 
     def createThreadToListen(self):
         thread = threading.Thread(target=self.process)

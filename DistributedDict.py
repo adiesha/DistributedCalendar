@@ -71,9 +71,9 @@ class DistributedDict:
             elif e._op == 2:
                 tempDeleteKeyLsit[e._m[0]] = e
 
-        for ck in tempCreateKeyList:
-            if ck not in tempDeleteKeyLsit:
-                self.calendar[ck] = tempCreateKeyList[ck]._m[1]
+        # for ck in tempCreateKeyList:
+        #     if ck not in tempDeleteKeyLsit:
+        #         self.calendar[ck] = tempCreateKeyList[ck]._m[1]
 
         for dk in tempDeleteKeyLsit:
             if dk not in tempCreateKeyList:
@@ -135,6 +135,10 @@ class DistributedDict:
 
     def getLamportTime(self):
         return self.nodeid, self.matrix[self.nodeid - 1][self.nodeid - 1]
+
+    def update_matrix(self, size):
+        self.noOfNodes = size
+        self.matrix = np.zeros((self.noOfNodes, self.noOfNodes), dtype=np.int32)
 
     # High level methods
     def displayCalendar(self):
