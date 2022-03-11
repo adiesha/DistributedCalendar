@@ -70,7 +70,6 @@ class Server():
                             # create response
                             x = {"response": "success"}
                             y = json.dumps(x)
-                            print(y)
                             print(self.map)
                             conn.sendall(str.encode(y))
                         if reqType == "3":

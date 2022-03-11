@@ -1,8 +1,10 @@
 from threading import Lock
 
+import hashlib
+import random
+import time
 import numpy as np
 
-from DistributedLog import Event, Operation
 
 
 class DistributedDict:
@@ -11,10 +13,10 @@ class DistributedDict:
         self.port = clientport
         self.nodeid = nodeid
         self.map = nodemap
+        self.log = set()
         self.calendar = {}
         self.mutex = Lock()
         self.noOfNodes = len(nodemap)
-        self.events = set()
         self.matrix = np.zeros((self.noOfNodes, self.noOfNodes), dtype=np.int32)
         if eventClass is None:
             self.eventClass = Event
@@ -22,32 +24,31 @@ class DistributedDict:
             self.eventClass = eventClass
 
     # Low level methods
-    def insert(self, x):
+    def insert(self, nodes, slot):
         # x should be a key value pair
         self.mutex.acquire()
+        nodes = [int(item) for item in nodes]
         try:
             nodeid, lamptime = self.getNewLamportTimestamp()
-            event = Event(self.nodeid, (nodeid, lamptime))
-            event._op = Operation.INSERT
-            event._m = x
-            self.events.add(event)
-
-            self.calendar[x[0]] = x[1]
+            event = Event(nodes, self.nodeid, (nodeid, lamptime))
+            event._op = 1
+            event._m = slot
+            self.log.add(event)
+            self.calendar[slot] = nodes
         finally:
             self.mutex.release()
         pass
 
-    def delete(self, x):
+    def delete(self, nodes, slot):
         self.mutex.acquire()
+        nodes = [int(item) for item in nodes]
         try:
             nodeid, lamptime = self.getNewLamportTimestamp()
-            event = Event(self.nodeid, (nodeid, lamptime))
-            event._op = Operation.DELETE
-            event._m = x
-            self.events.add(event)
-
-            r = self.calendar.pop(x[0], None)
-            # print(r)
+            event = Event(nodes, self.nodeid, (nodeid, lamptime))
+            event._op = 2
+            event._m = slot
+            self.log.add(event)
+            r = self.calendar.pop(slot, None)
             pass
         finally:
             self.mutex.release()
@@ -66,9 +67,9 @@ class DistributedDict:
         tempCreateKeyList = {}
         tempDeleteKeyLsit = {}
         for e in NE:
-            if e._op == Operation.INSERT:
+            if e._op == 1:
                 tempCreateKeyList[e._m[0]] = e
-            elif e._op == Operation.DELETE:
+            elif e._op == 2:
                 tempDeleteKeyLsit[e._m[0]] = e
 
         for ck in tempCreateKeyList:
@@ -84,7 +85,7 @@ class DistributedDict:
         # merge the partial logs
         self.updateMatrixFromReceivedMatrix(matrix, k)
         self.unionevents(pl)
-        for ev in self.events.copy():
+        for ev in self.log.copy():
             needArecord = False
             for j in range(1, self.noOfNodes + 1):
                 if not self.hasRecord(self.matrix, ev, j):
@@ -93,13 +94,13 @@ class DistributedDict:
             if needArecord:
                 pass
             else:
-                self.events.remove(ev)
+                self.log.remove(ev)
 
     def unionevents(self, pl):
         for e in pl:
-            if e not in self.events:
+            if e not in self.log:
                 # add to the events
-                self.events.add(e)
+                self.log.add(e)
                 # log the event
 
     def updateMatrixFromReceivedMatrix(self, receivedMatrix, k):
@@ -121,7 +122,7 @@ class DistributedDict:
 
     def calculatePartialLog(self, k):
         pl = []
-        for e in self.events:
+        for e in self.log:
             if not self.hasRecord(self.matrix, e, k):
                 pl.append(e)
         return pl
@@ -180,3 +181,28 @@ class Appointment:
     def __str__(self):
         return "Timeslot: {0} scheduled by: {1} participants {2)".format(self.timeslot, self.scheduler,
                                                                          self.participants)
+
+
+class Event:
+
+    def __init__(self, nodes, nodeid=1, timestamp=(0, 0)):
+        hash = hashlib.sha1()
+        hash.update(str(time.time_ns()).encode('utf-8') + str(random.randint(1, 1000000)).encode('utf-8'))
+        self.id = hash.hexdigest()
+        self.nodeId = nodeid
+        self.nodes = nodes
+        self.ts = timestamp
+        self._op = None
+        self._m = None
+
+    def __hash__(self):
+        return hash(self.id)
+
+    def __eq__(self, other):
+        if isinstance(other, Event):
+            return hash(self.id) == hash(other)
+        return False
+
+    def __str__(self):
+        return "Event Hash: {0} Nodes:{1} Timestamp: {2} Op: {3} Slot:{4}".format(self.id, self.nodes, self.ts, self._op, self._m)
+

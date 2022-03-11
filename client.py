@@ -5,7 +5,6 @@ import sys
 import time
 import threading
 
-from DistributedLog import DistributedLog
 from DistributedDict import DistributedDict
 
 
@@ -63,7 +62,7 @@ class Client():
             resp = self.getJsonObj(data.decode("utf-8"))
 
             self.seq = resp['seq']
-            print("sequence: " + self.seq)
+            print("Node ID: " + self.seq)
             s.close()
 
     def sendNodePort(self):
@@ -78,7 +77,7 @@ class Client():
             data = self.receiveWhole(s)
             resp = self.getJsonObj(data.decode("utf-8"))
 
-            print(resp['response'])
+            # print(resp['response'])
             s.close()
 
     def getMapData(self):
@@ -92,7 +91,6 @@ class Client():
             data = self.receiveWhole(s)
             resp = self.getJsonObj(data.decode("utf-8"))
 
-            print(resp)
             s.close()
             return resp
 
@@ -104,7 +102,6 @@ class Client():
                 s.listen()
                 conn, addr = s.accept()
                 with conn:
-                    print(f"Connected by {addr}")
                     time.sleep(2)
                     while True:
                         data = self.receiveWhole(conn)
@@ -123,7 +120,7 @@ class Client():
         thread.daemon = True
         thread.start()
 
-    def broadcast(self, event, nodes, slot):
+    def send(self, event, nodes, slot):
         for node in nodes:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.connect((self.HOST, int(self.map[node])))
@@ -132,8 +129,8 @@ class Client():
                 s.sendall(str.encode(jsonReq))
                 s.close()
 
-    def createThreadToBroadcast(self, event, nodes, slot):
-        thread = threading.Thread(target=self.broadcast(event, nodes, slot))
+    def createThreadToSend(self, event, nodes, slot):
+        thread = threading.Thread(target=self.send(event, nodes, slot))
         thread.daemon = True
         thread.start()
 
@@ -142,28 +139,32 @@ class Client():
             print ("Display Calender\t[d]")
             # Make an appoint with node 2 for slot 2: m 2 2
             # Make an appoint with node 1,2 and 3 for slot 2: m 1,2,3 2
-            print ("Make Appointment\t[m <node/s> <slot>]")
-            print ("Cancel Appointment\t[c <node/s> <slot>]")
+            print ("Make Appointment\t[m <node(s)> <slot>]")
+            print ("Cancel Appointment\t[c <node(s)> <slot>]")
             print ("Quit    \t[q]")
 
             resp = input("Choice: ").lower().split()
-            if resp[0] == 'd':
-                print("Display Calender")
-                # d.displayCalendar()
-            elif resp[0] == 'm':
-                nodes = resp[1].split(",")
-                self.createThreadToBroadcast(4, nodes, resp[2])
-            elif resp[0] == 'c':
-                nodes = resp[1].split(",")
-                self.createThreadToBroadcast(4, nodes, resp[2])
-            elif resp == 'q':
-                print("Quitting")
-                break
+            if int(resp[2]) > 10:
+                print("Please enter a slot between 1 & 10")
+            else:
+                if resp[0] == 'd':
+                    print("Display Calender")
+                    # d.displayCalendar()
+                elif resp[0] == 'm':
+                    nodes = resp[1].split(",")
+                    d.insert(nodes, resp[2])
+                    partiallog, matrix = d.sendMessage()
+                    self.createThreadToSend(4, nodes, int(resp[2]))
+                elif resp[0] == 'c':
+                    nodes = resp[1].split(",") 
+                    d.delete(nodes, resp[2])
+                    partiallog, matrix = d.sendMessage()             
+                    self.createThreadToSend(5, nodes, int(resp[2]))
+                elif resp == 'q':
+                    print("Quitting")
+                    break
 
     def main(self):
-        print('Number of arguments:', len(sys.argv), 'arguments.')
-        print('Argument List:', str(sys.argv))
-
         if len(sys.argv) > 1:
             print("Client's listening port {0}".format(sys.argv[1]))
             self.clientPort = sys.argv[1]
@@ -173,7 +174,7 @@ class Client():
         # need to put following inside the menu
         self.createThreadToListen()
         self.map = self.getMapData()
-        d = DistributedDict(self.clientPort, self.seq, self.map)
+        d = DistributedDict(self.clientPort, int(self.seq), self.map)
         self.menu(d)
 
 
