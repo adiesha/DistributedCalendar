@@ -99,7 +99,6 @@ class Client():
                     time.sleep(2)
                     while True:
                         data = self.receiveWhole(conn)
-                        map = True
                         if data == b'':
                             break
                         try:
@@ -118,12 +117,10 @@ class Client():
         thread.start()
 
     def send(self, nodes):
-        if self.seq not in nodes:
-            nodes.append(self.seq)
         for node in nodes:
             if node != self.seq:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                    s.connect((self.HOST, int(self.map[node])))
+                    s.connect((self.HOST, int(self.map[str(node)])))
                     partiallog, matrix = self.dict_obj.sendMessage(int(node))
                     message = pickle.dumps([partiallog, matrix, int(node)])
                     message = bytes(f"{len(message):<{10}}", 'utf-8')+message
@@ -145,20 +142,25 @@ class Client():
             print ("Quit    \t[q]")
 
             resp = input("Choice: ").lower().split()
-            if resp[0] == 'd':
-                print("Display Calendar")
-                self.dict_obj.displayCalendar()
-            elif resp[0] == 'm':
-                nodes = resp[1].split(",")
-                self.dict_obj.insert(nodes, resp[2])
-                self.createThreadToSend(nodes)
-            elif resp[0] == 'c':
-                nodes = resp[1].split(",") 
-                self.dict_obj.delete(nodes, resp[2])        
-                self.createThreadToSend(nodes)
-            elif resp == 'q':
-                print("Quitting")
-                break
+            try:
+                if resp[0] == 'd':
+                    print("Display Calendar")
+                    self.dict_obj.displayCalendar()
+                elif resp[0] == 'm':
+                    nodes = resp[1].split(",")
+                    result = self.dict_obj.addAppointment(nodes, resp[2])
+                    if result:
+                        self.createThreadToSend(nodes)
+                elif resp[0] == 'c':
+                    nodes = resp[1].split(",") 
+                    result = self.dict_obj.cancelAppointment(nodes, resp[2]) 
+                    if result:       
+                        self.createThreadToSend(nodes)
+                elif resp == 'q':
+                    print("Quitting")
+                    break
+            except IndexError:
+                print("Incorrect input")
 
     def main(self):
         if len(sys.argv) > 1:

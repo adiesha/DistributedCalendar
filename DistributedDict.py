@@ -26,17 +26,12 @@ class DistributedDict:
     def insert(self, nodes, slot):
         # x should be a key value pair
         self.mutex.acquire()
-        nodes = [int(item) for item in nodes]
-        if self.nodeid not in nodes:
-            nodes.append(self.nodeid)
         try:
             nodeid, lamptime = self.getNewLamportTimestamp()
             event = Event(nodes, self.nodeid, (nodeid, lamptime))
             event._op = 1
             event._m = slot
             self.log.add(event)
-            self.calendar[slot] = nodes
-            # self.updateDict([event])
         finally:
             self.mutex.release()
         pass
@@ -44,16 +39,12 @@ class DistributedDict:
     def delete(self, nodes, slot):
         self.mutex.acquire()
         nodes = [int(item) for item in nodes]
-        if self.nodeid not in nodes:
-            nodes.append(self.nodeid)
         try:
             nodeid, lamptime = self.getNewLamportTimestamp()
             event = Event(nodes, self.nodeid, (nodeid, lamptime))
             event._op = 2
             event._m = slot
             self.log.add(event)
-            self.calendar.pop(slot, None)
-            # self.updateDict([event])
         finally:
             self.mutex.release()
 
@@ -67,6 +58,26 @@ class DistributedDict:
         matrix = m[1]
         k = m[2]
         NE = self.calculateNE(pl)
+
+        tempCreateKeyList = {}
+        tempDeleteKeyList = {}
+        for e in NE:
+            if e._op == 1:
+                tempCreateKeyList[e._m] = e
+            elif e._op == 2:
+                tempDeleteKeyList[e._m] = e
+
+        for ck in tempCreateKeyList:
+            if ck not in tempDeleteKeyList:
+                res = self.addAppointment(tempCreateKeyList[ck].nodes, ck, False)
+                # self.calendar[ck] = tempCreateKeyList[ck].nodes
+
+        for dk in tempDeleteKeyList:
+            if dk not in tempCreateKeyList:
+                if dk not in self.calendar:
+                    print("Delete key not in calandar Error {0}".format(dk))
+                res = self.cancelAppointment(tempDeleteKeyList[dk].nodes, ck)
+                # self.calendar.pop(dk, None)
 
         # merge the partial logs
         self.updateMatrixFromReceivedMatrix(matrix, k)
@@ -82,23 +93,6 @@ class DistributedDict:
             else:
                 self.log.remove(ev)
 
-        tempCreateKeyList = {}
-        tempDeleteKeyList = {}
-        for e in NE:
-            if e._op == 1:
-                tempCreateKeyList[e._m] = e
-            elif e._op == 2:
-                tempDeleteKeyList[e._m] = e
-
-        for ck in tempCreateKeyList:
-            if ck not in tempDeleteKeyList:
-                self.calendar[ck] = tempCreateKeyList[ck].nodes
-
-        for dk in tempDeleteKeyList:
-            if dk not in tempCreateKeyList:
-                if dk not in self.calendar:
-                    print("Delete key not in calandar Error {0}".format(dk))
-                self.calendar.pop(dk, None)
 
     def unionevents(self, pl):
         for e in pl:
@@ -147,28 +141,59 @@ class DistributedDict:
 
     # High level methods
     def displayCalendar(self):
+        print("-----------------------")
         for key, value in self.calendar.items():
-            print(key, ' : ', value)
+            print("\t"+key+"\t")
+            for appt in value:
+                print(str(appt))
+        print("-----------------------") 
 
-    def addAppointment(self, message):
+    def addAppointment(self, participants, timeslot, sending = True):
         # Todo: implement the add appointment logic here
-        # create the appointment
-
-        timeslot = message[0]
-        scheduler = message[1]
-        participants = message[2]
+        # create the appointment 
+        participants = [int(item) for item in participants]
+        if self.nodeid not in participants:
+            participants.append(self.nodeid)
         appnmnt = Appointment()
         appnmnt.timeslot = timeslot
-        appnmnt.scheduler = scheduler
+        appnmnt.scheduler = self.nodeid
         appnmnt.participants = participants
 
-        # check for conflicts
-        # if any of the participants are already in one of the appointments in that timesolt return false
+        if timeslot in self.calendar:
+            flag = True
+            for elem in self.calendar[timeslot]:
+                for participant in participants:
+                    if elem.isParticipant(participant):
+                        if sending:
+                            print("{0} is already booked for timeslot {1}". format(participant, timeslot))
+                            sending =  False
+                        flag = False
+            if flag:  
+                self.calendar[timeslot].append(appnmnt) 
+                self.insert(participants, timeslot)
+        else:
+            self.calendar[timeslot] = [appnmnt]
+            self.insert(participants, timeslot)
 
-        pass
+        return sending
 
-    def cancelAppointment(self, message):
-        pass
+
+    def cancelAppointment(self, participants, timeslot):
+        if self.nodeid not in participants:
+            participants.append(self.nodeid)
+        flag = True
+        if timeslot in self.calendar:
+            for elem in self.calendar[timeslot]:
+                for participant in participants:
+                    if not elem.isParticipant(participant):
+                        print("Appointment does no exist")
+                        flag = False
+            if flag:  
+                self.delete(participants, timeslot)
+        else:
+            flag = False
+            print("Appointment does no exist")
+        return flag
 
     def updateDict(self, events):
         pass
@@ -187,8 +212,7 @@ class Appointment:
         return self.scheduler == schedulerperson
 
     def __str__(self):
-        return "Timeslot: {0} scheduled by: {1} participants {2)".format(self.timeslot, self.scheduler,
-                                                                         self.participants)
+        return "Timeslot: {0} scheduled by: {1} participants {2}".format(self.timeslot, len(self.participants), self.participants)
 
 
 class Event:
