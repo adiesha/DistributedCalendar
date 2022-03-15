@@ -32,6 +32,9 @@ class DistributedDict:
             event._m = x
             self.events.add(event)
 
+            # update the appointment with the timestamp
+            x[1].ts = (lamptime, nodeid)
+
             self.calendar[x[0]] = [x[1]]
         finally:
             self.mutex.release()
@@ -46,6 +49,9 @@ class DistributedDict:
             event._op = Operation.INSERT
             event._m = x
             self.events.add(event)
+
+            # update the appointment with the timestamp
+            x[1].ts = (lamptime, nodeid)
 
             # appended the value instead inserting
             self.calendar[x[0]].append(x[1])
@@ -278,12 +284,37 @@ class DistributedDict:
                         return True
         return False
 
+    def checkConflictingAppnmts(self):
+        conflicts = []
+        for k, v in self.calendar.items():
+            conflicts.extend(self.checkConflictsInaTimeSlot(k, v))
+        return conflicts
+
+    def checkConflictsInaTimeSlot(self, k, appnmts):
+        apps = appnmts.copy()
+        apps.sort(key=lambda x: x.ts)
+        conflictingAppointments = []
+        for i in range(len(apps)):
+            # print(apps[i].participants)
+            if apps[i] in conflictingAppointments:
+                continue
+            for j in range(i + 1, len(apps)):
+                # print(apps[j].participants)
+                if apps[j] not in conflictingAppointments:
+                    if any(item in apps[i].participants for item in apps[j].participants):
+                        conflictingAppointments.append(apps[j])
+            # print("8888888")
+        # for c in conflictingAppointments:
+        #     print(c)
+        return conflictingAppointments
+
 
 class Appointment:
     def __init__(self):
         self.timeslot = None
         self.scheduler = None
         self.participants = []
+        self.ts = None
 
     def isParticipant(self, participant):
         return participant in self.participants
@@ -292,5 +323,5 @@ class Appointment:
         return self.scheduler == schedulerperson
 
     def __str__(self):
-        return "Timeslot: {0} scheduled by: {1} participants {2}".format(self.timeslot, self.scheduler,
-                                                                         self.participants)
+        return "Timeslot: {0} scheduled by: {1} participants {2} TS: {3}".format(self.timeslot, self.scheduler,
+                                                                                 self.participants, self.ts)
