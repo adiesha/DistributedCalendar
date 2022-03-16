@@ -1,11 +1,11 @@
 # echo-client.py
 import json
+import random
 import socket
 import sys
-import time
 import threading
+import time
 
-from DistributedLog import DistributedLog
 from DistributedDict import DistributedDict
 
 
@@ -18,7 +18,7 @@ class Client():
         self.seq = None
         self.map = None
 
-    def createJSONReq(self, typeReq, nodes = None, slot = None):
+    def createJSONReq(self, typeReq, nodes=None, slot=None):
         # Initialize node
         if typeReq == 1:
             request = {"req": "1"}
@@ -62,8 +62,8 @@ class Client():
             data = self.receiveWhole(s)
             resp = self.getJsonObj(data.decode("utf-8"))
 
-            self.seq = resp['seq']
-            print("sequence: " + self.seq)
+            self.seq = int(resp['seq'])
+            print("sequence: " + str(self.seq))
             s.close()
 
     def sendNodePort(self):
@@ -96,10 +96,9 @@ class Client():
             s.close()
             return resp
 
-
     def process(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.bind((self.HOST,int(self.clientPort)))
+            s.bind((self.HOST, int(self.clientPort)))
             while (True):
                 s.listen()
                 conn, addr = s.accept()
@@ -115,7 +114,7 @@ class Client():
                             event = message
                             print("Message received: ", message)
                         else:
-                            self.map =  message
+                            self.map = message
                             print("Updated Map: ", self.map)
 
     def createThreadToListen(self):
@@ -139,24 +138,46 @@ class Client():
 
     def menu(self, d):
         while True:
-            print ("Display Calender\t[d]")
+            print("Display Calender\t[d]")
             # Make an appoint with node 2 for slot 2: m 2 2
             # Make an appoint with node 1,2 and 3 for slot 2: m 1,2,3 2
-            print ("Make Appointment\t[m <node/s> <slot>]")
-            print ("Cancel Appointment\t[c <node/s> <slot>]")
-            print ("Quit    \t[q]")
+            print("Make Appointment\t[m <node/s> <slot>]")
+            print("Cancel Appointment\t[c <node/s> <slot>]")
+            print("Quit    \t[q]")
 
             resp = input("Choice: ").lower().split()
             if resp[0] == 'd':
                 print("Display Calender")
+                d.display()
                 # d.displayCalendar()
             elif resp[0] == 'm':
                 nodes = resp[1].split(",")
-                self.createThreadToBroadcast(4, nodes, resp[2])
+                participants = [int(i) for i in nodes]
+                scheduler = int(d.nodeid)
+                timeslot = int(resp[2])
+                print(participants)
+                success = d.addAppointment((timeslot, scheduler, participants))
+                if not success:
+                    print("Conflict Detected. Cannot continue with the appointment")
+                else:
+                    # remove itself from the participant list
+                    tempParticipants = participants.copy()
+                    tempParticipants.remove(d.nodeid)
+                    # for each participant send the partial log
+                    for p in tempParticipants:
+                        (NP, mtx, nid) = d.sendMessage(p)
+                        # send the message
+                # self.createThreadToBroadcast(4, nodes, resp[2])
             elif resp[0] == 'c':
-                nodes = resp[1].split(",")
-                self.createThreadToBroadcast(4, nodes, resp[2])
-            elif resp == 'q':
+                # nodes = resp[1].split(",")
+                # participants = [int(i) for i in nodes]
+                scheduler = int(d.nodeid)
+                timeslot = int(resp[1])
+                appntment = int(resp[2])
+                success = d.cancelAppointment((timeslot, d.calendar[timeslot][appntment - 1]))
+                print(success)
+                # self.createThreadToBroadcast(4, nodes, resp[2])
+            elif resp[0] == 'q':
                 print("Quitting")
                 break
 
@@ -167,14 +188,20 @@ class Client():
         if len(sys.argv) > 1:
             print("Client's listening port {0}".format(sys.argv[1]))
             self.clientPort = sys.argv[1]
-        
+        else:
+            print("User did not choose a port for the node. Random port between 55000-63000 will be selected")
+            port = random.randint(55000, 63000)
+            print("Random port {0} selected".format(port))
+            self.clientPort = port
+
         self.initializeTheNode()
         self.sendNodePort()
         # need to put following inside the menu
         self.createThreadToListen()
         self.map = self.getMapData()
-        d = DistributedDict(self.clientPort, self.seq, self.map)
-        self.menu(d)
+        if input() == "":
+            d = DistributedDict(self.clientPort, self.seq, self.map)
+            self.menu(d)
 
 
 if __name__ == '__main__':

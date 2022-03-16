@@ -256,6 +256,8 @@ def testAddAppointmentWithConflicts():
     # add several appts to  dl2 that could conflict with the dl1 appts
     dl2.addAppointment((1, 2, [2, 3]))
     dl2.addAppointment((1, 4, [4, 6]))
+    dl2.display()
+    dl1.display()
 
 
 if __name__ == '__main__':

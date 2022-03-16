@@ -308,6 +308,19 @@ class DistributedDict:
         #     print(c)
         return conflictingAppointments
 
+    def display(self):
+        print(
+            "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+        print("Displaying the calendar of Node {0}".format(self.nodeid))
+        for k, v in self.calendar.items():
+            print("Timeslot: {0} -> ".format(k), end='')
+            for a in v:
+                print(str(a) + "\t||\t", end='')
+            print("")
+
+        print(
+            "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+
 
 class Appointment:
     def __init__(self):
