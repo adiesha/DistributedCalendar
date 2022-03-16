@@ -1,5 +1,8 @@
+import pickle
+import socket
 from threading import Lock
 
+import chardet
 import numpy as np
 
 from DistributedLog import Event, Operation
@@ -130,7 +133,12 @@ class DistributedDict:
                 if e._m[1] not in (tempCreateKeyList[e._m[0]] if e._m[0] in tempCreateKeyList else []):
                     # we need to delete this value from the dictionary
                     if e._m[0] in self.calendar:
-                        self.calendar[e._m[0]].remove(e._m[1])
+                        el = next((x for x in self.calendar[e._m[0]] if x.ts == e._m[1].ts), None)
+                        # we have to do this since when pickling and unpickling hash changes unless we override the hash function
+                        if el is not None:
+                            self.calendar[e._m[0]].remove(el)
+                        else:
+                            print("Couldn't find the appointment to delete")
                         # make sure to write logic to remove the key if list is empty after this
                         if not self.calendar[e._m[0]]:
                             print("No value for key {0} in the dictionary. Removing the key".format(e._m[0]))
@@ -245,6 +253,14 @@ class DistributedDict:
             else:
                 print("Timeslot already exist. Moving on to adding non conflicting appointment to the local calendar")
                 self.appendValue((timeslot, appnmnt))
+
+            tempParticipants = participants.copy()
+            tempParticipants.remove(self.nodeid)
+
+            # for each participant send the partial log
+            for p in tempParticipants:
+                (NP, mtx, nid) = self.sendMessage(p)
+                self.sendViaSocket((NP, mtx, nid), p)
             return True
 
     def cancelAppointment(self, message):
@@ -267,11 +283,36 @@ class DistributedDict:
                     self.deleteValue((timeslot, appnmnt))
                 elif len(self.calendar[timeslot]) == 1:
                     self.delete((timeslot, appnmnt))
+
+                tempParticipants = participants.copy()
+                tempParticipants.remove(self.nodeid)
+
+                # for each participant send the partial log
+                for p in tempParticipants:
+                    (NP, mtx, nid) = self.sendMessage(p)
+                    self.sendViaSocket((NP, mtx, nid), p)
+
                 return True
         pass
 
     def updateDict(self, partial_log):
         pass
+
+    def sendViaSocket(self, m, p):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.connect((self.HOST, int(self.map[p])))
+
+            strReq = {}
+            strReq['pl'] = m[0]
+            strReq['mtx'] = m[1]
+            strReq['nodeid'] = m[2]
+            the_encoding = chardet.detect(pickle.dumps(self.events))['encoding']
+            print(the_encoding)
+            strReq['encoding'] = the_encoding
+            strReq['msg'] = self.events
+
+            pickledMessage = pickle.dumps(strReq)
+            s.sendall(pickledMessage)
 
     def isInternalConflicts(self, timeslot, scheduler, participants, calendar):
         if timeslot not in self.calendar:

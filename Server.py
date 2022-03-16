@@ -1,7 +1,7 @@
 import json
 import socket
-import time
 import threading
+import time
 
 
 class Server():
@@ -35,7 +35,7 @@ class Server():
         thread.daemon = True
         thread.start()
 
-    def sendMap(self,):        
+    def sendMap(self, ):
         for key, value in self.map.items():
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.connect((self.HOST, int(value)))
@@ -78,7 +78,7 @@ class Server():
                             y = json.dumps(self.map)
                             conn.sendall(str.encode(y))
                             print("New node {0} added".format(jsonreq['seq']))
-                            self.sendNewMap()
+                            # self.sendNewMap()
 
 
 if __name__ == '__main__':

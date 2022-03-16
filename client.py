@@ -1,10 +1,13 @@
 # echo-client.py
 import json
+import pickle
 import random
 import socket
 import sys
 import threading
 import time
+
+import chardet
 
 from DistributedDict import DistributedDict
 
@@ -17,6 +20,7 @@ class Client():
         self.clientPort = clientPort
         self.seq = None
         self.map = None
+        self.dd = None
 
     def createJSONReq(self, typeReq, nodes=None, slot=None):
         # Initialize node
@@ -43,7 +47,14 @@ class Client():
             return ""
 
     def receiveWhole(self, s):
-        data = s.recv(1024)
+        BUFF_SIZE = 4096  # 4 KiB
+        data = b''
+        while True:
+            part = s.recv(BUFF_SIZE)
+            data += part
+            if len(part) < BUFF_SIZE:
+                # either 0 or end of data
+                break
         return data
 
     def getJsonObj(self, input):
@@ -81,7 +92,8 @@ class Client():
             print(resp['response'])
             s.close()
 
-    def getMapData(self):
+    def downloadNodeMap(self):
+        # establish connection with server and give info about the client port
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.connect((self.HOST, self.SERVER_PORT))
             strReq = self.createJSONReq(3)
@@ -95,6 +107,24 @@ class Client():
             print(resp)
             s.close()
             return resp
+
+    def getMapData(self):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.connect((self.HOST, self.SERVER_PORT))
+            strReq = self.createJSONReq(3)
+            jsonReq = json.dumps(strReq)
+
+            s.sendall(str.encode(jsonReq))
+
+            data = self.receiveWhole(s)
+            resp = self.getJsonObj(data.decode("utf-8"))
+            resp2 = {}
+            for k, v in resp.items():
+                resp2[int(k)] = int(v)
+
+            print(resp2)
+            s.close()
+            return resp2
 
     def process(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -118,9 +148,10 @@ class Client():
                             print("Updated Map: ", self.map)
 
     def createThreadToListen(self):
-        thread = threading.Thread(target=self.process)
+        thread = threading.Thread(target=self.ReceiveMessageFunct)
         thread.daemon = True
         thread.start()
+        return thread
 
     def broadcast(self, event, nodes, slot):
         for node in nodes:
@@ -135,6 +166,48 @@ class Client():
         thread = threading.Thread(target=self.broadcast(event, nodes, slot))
         thread.daemon = True
         thread.start()
+
+    def ReceiveMessageFunct(self):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            print("started listening to port {0}".format(self.clientPort))
+            s.bind((self.HOST, self.clientPort))
+            while (True):
+                s.listen()
+                conn, addr = s.accept()
+                with conn:
+                    print(f"Connected by {addr}")
+                    while True:
+                        data = self.receiveWhole(conn)
+                        if data == b'':
+                            break
+                        unpickledRequest = pickle.loads(data)
+                        print(unpickledRequest)
+                        if isinstance(unpickledRequest, dict):
+                            # join the partial log
+                            np = unpickledRequest['pl']
+                            mtx = unpickledRequest['mtx']
+                            nid = unpickledRequest['nodeid']
+
+                            self.dd.receiveMessage((np, mtx, nid))
+                            conflicts = self.dd.checkConflictingAppnmts()
+                            for c in conflicts:
+                                self.dd.cancelAppointment((c.timeslot, c))
+
+                            # create message receive event
+                            # send the message success request
+                            response = {"response": "Success"}
+                            the_encoding = chardet.detect(pickle.dumps(response))['encoding']
+                            response['encoding'] = the_encoding
+                            pickledMessage = pickle.dumps(response)
+                            conn.sendall(pickledMessage)
+
+                        else:
+                            response = {"response": "Failed", "error": "Request should be a dictionary"}
+                            the_encoding = chardet.detect(pickle.dumps(response))['encoding']
+                            response['encoding'] = the_encoding
+                            pickledMessage = pickle.dumps(response)
+                            conn.sendall(pickledMessage)
+                        break
 
     def menu(self, d):
         while True:
@@ -197,10 +270,14 @@ class Client():
         self.initializeTheNode()
         self.sendNodePort()
         # need to put following inside the menu
-        self.createThreadToListen()
-        self.map = self.getMapData()
+        # self.createThreadToListen()
+        print("Reached")
         if input() == "":
+            print("wow")
+            self.map = self.getMapData()
             d = DistributedDict(self.clientPort, self.seq, self.map)
+            self.dd = d
+            th = self.createThreadToListen()
             self.menu(d)
 
 
