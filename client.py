@@ -14,13 +14,14 @@ from DistributedDict import DistributedDict
 
 class Client():
 
-    def __init__(self, clientPort=62344):
+    def __init__(self, clientPort=62344, hb=20):
         self.HOST = "127.0.0.1"  # The server's hostname or IP address
         self.SERVER_PORT = 65431  # The port used by the server
         self.clientPort = clientPort
         self.seq = None
         self.map = None
         self.dd = None
+        self.heartbeatInterval = hb
 
     def createJSONReq(self, typeReq, nodes=None, slot=None):
         # Initialize node
@@ -167,6 +168,11 @@ class Client():
         thread.daemon = True
         thread.start()
 
+    def createHeartBeatThread(self):
+        thread = threading.Thread(target=self.heartbeat)
+        thread.daemon = True
+        thread.start()
+
     def ReceiveMessageFunct(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             print("started listening to port {0}".format(self.clientPort))
@@ -208,6 +214,17 @@ class Client():
                             pickledMessage = pickle.dumps(response)
                             conn.sendall(pickledMessage)
                         break
+
+    def heartbeat(self):
+        while(True):
+            time.sleep(random.randint(15, 20))
+            print("heartbeating")
+            # do the hearbeat
+            nodes = sorted(self.map.keys())
+            # remove the self node
+            nodes.remove(self.seq)
+            for n in nodes:
+                self.dd.sendViaSocket(self.dd.sendMessage(n), n)
 
     def menu(self, d):
         while True:
@@ -284,7 +301,8 @@ class Client():
             self.map = self.getMapData()
             d = DistributedDict(self.clientPort, self.seq, self.map)
             self.dd = d
-            th = self.createThreadToListen()
+            self.createThreadToListen()
+            self.createHeartBeatThread()
             self.menu(d)
 
 
