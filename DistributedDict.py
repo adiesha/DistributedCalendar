@@ -268,9 +268,10 @@ class DistributedDict:
         appnmnt = message[1]
 
         scheduler = appnmnt.scheduler
+        canceler = self.nodeid
         participants = appnmnt.participants
         # check whether canceler is a participant
-        if not (scheduler in participants):
+        if not (canceler in participants):
             print("Canceler is not an participant of the appointment")
             return False
         else:
