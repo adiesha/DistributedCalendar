@@ -248,11 +248,18 @@ class Client():
                 timeslot = int(resp[1])
                 appntment = int(resp[2])
                 success = d.cancelAppointment((timeslot, d.calendar[timeslot][appntment - 1]))
-                print(success)
+                print("Cancel appointment was {0}".format("successful" if success else "Unsuccessful"))
                 # self.createThreadToBroadcast(4, nodes, resp[2])
             elif resp[0] == 'q':
                 print("Quitting")
                 break
+            elif resp[0] == 'h':
+                # do the hearbeat
+                nodes = sorted(self.map.keys())
+                # remove the self node
+                nodes.remove(self.seq)
+                for n in nodes:
+                    self.dd.sendViaSocket(self.dd.sendMessage(n), n)
 
     def main(self):
         print('Number of arguments:', len(sys.argv), 'arguments.')
