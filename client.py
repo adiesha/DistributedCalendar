@@ -271,9 +271,9 @@ class Client():
         self.sendNodePort()
         # need to put following inside the menu
         # self.createThreadToListen()
-        print("Reached")
+        print("Ready to start the Calendar")
         if input() == "":
-            print("wow")
+            print("Started Creating the Distributed Calendar")
             self.map = self.getMapData()
             d = DistributedDict(self.clientPort, self.seq, self.map)
             self.dd = d
