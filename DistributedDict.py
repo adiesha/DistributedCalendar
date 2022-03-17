@@ -210,7 +210,7 @@ class DistributedDict:
         return matrix[k - 1][eR.nodeId - 1] >= eR.ts[1]
 
     def getNewLamportTimestamp(self):
-        self.matrix[self.nodeid - 1][self.nodeid - 1] = self.matrix[self.nodeid - 1][self.nodeid - 1] + 1
+        self.matrix[self.nodeid - 1][self.nodeid - 1] = max(self.matrix[self.nodeid - 1]) + 1
         return self.getLamportTime()
 
     def getLamportTime(self):
