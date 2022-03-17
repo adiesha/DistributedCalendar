@@ -1,17 +1,19 @@
 import json
 import socket
+import sys
 import threading
 import time
 
 
 class Server():
 
-    def __init__(self):
+    def __init__(self, maxNodes=4):
         self.HOST = "127.0.0.1"  # Standard loopback interface address (localhost)
         self.PORT = 65431  # Port to listen on (non-privileged ports are > 1023)
         self.mutex = threading.Lock()
         self.seq = 0
         self.map = {}
+        self.count = maxNodes
 
     def getNewSeq(self):
         self.mutex.acquire()
@@ -78,9 +80,23 @@ class Server():
                             y = json.dumps(self.map)
                             conn.sendall(str.encode(y))
                             print("New node {0} added".format(jsonreq['seq']))
+                            self.count = self.count - 1
+                            if self.count == 0:
+                                print("Maximum Number of nodes connected Server is closing down")
+                                s.close()
+                                exit(0)
                             # self.sendNewMap()
 
 
 if __name__ == '__main__':
-    serv = Server()
+    print('Number of arguments:', len(sys.argv), 'arguments.')
+    print('Argument List:', str(sys.argv))
+    mxnodes = 4
+    if len(sys.argv) > 1:
+        print("Maximum Number of nodes allowed {0}".format(sys.argv[1]))
+        maxnodes = sys.argv[1]
+    else:
+        print("Maximum number of nodes was not inputted. Default value is 4")
+
+    serv = Server(mxnodes)
     serv.main()
