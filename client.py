@@ -287,7 +287,14 @@ class Client():
                 print("Heartbeat toggled to {0}".format("ON" if self.togglehb else "OFF"))
                 pass
             elif resp[0] == 'e':
-                pass
+                print("Printing Diagnostics")
+                print("Node Id: {0}".format(self.seq))
+                print("Node Map: {0}".format(self.map))
+                print("Server IP: {0}".format(self.HOST))
+                print("Node Port: {0}".format(self.SERVER_PORT))
+                print("Client Port: {0}".format(self.clientPort))
+                print("mtx : \n{0}".format(self.dd.matrix))
+                print("Heartbeat Toggle status is {0}".format("ON" if self.togglehb else "OFF"))
 
     def main(self):
         print('Number of arguments:', len(sys.argv), 'arguments.')

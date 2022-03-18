@@ -81,6 +81,7 @@ class Server():
                             conn.sendall(str.encode(y))
                             print("New node {0} added".format(jsonreq['seq']))
                             self.count = self.count - 1
+                            print("Nodes left to be informed: {0}".format(str(self.count)))
                             if self.count == 0:
                                 print("Maximum Number of nodes connected. Server is closing down")
                                 s.close()
@@ -94,7 +95,7 @@ if __name__ == '__main__':
     mxnodes = 4
     if len(sys.argv) > 1:
         print("Maximum Number of nodes allowed {0}".format(sys.argv[1]))
-        maxnodes = sys.argv[1]
+        mxnodes = int(sys.argv[1])
     else:
         print("Maximum number of nodes was not inputted. Default value is 4")
 
