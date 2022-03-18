@@ -14,7 +14,7 @@ from DistributedDict import DistributedDict
 
 class Client():
 
-    def __init__(self, clientPort=62344, hb=20):
+    def __init__(self, clientPort=62344, hb=20, toggleHB=False):
         self.HOST = "127.0.0.1"  # The server's hostname or IP address
         self.SERVER_PORT = 65431  # The port used by the server
         self.clientPort = clientPort
@@ -22,6 +22,7 @@ class Client():
         self.map = None
         self.dd = None
         self.heartbeatInterval = hb
+        self.togglehb = toggleHB
 
     def createJSONReq(self, typeReq, nodes=None, slot=None):
         # Initialize node
@@ -216,15 +217,16 @@ class Client():
                         break
 
     def heartbeat(self):
-        while(True):
-            time.sleep(random.randint(15, 20))
-            print("heartbeating")
-            # do the hearbeat
-            nodes = sorted(self.map.keys())
-            # remove the self node
-            nodes.remove(self.seq)
-            for n in nodes:
-                self.dd.sendViaSocket(self.dd.sendMessage(n), n)
+        while (True):
+            time.sleep(random.randint(15, self.heartbeatInterval))
+            if self.togglehb:
+                print("heartbeating")
+                # do the hearbeat
+                nodes = sorted(self.map.keys())
+                # remove the self node
+                nodes.remove(self.seq)
+                for n in nodes:
+                    self.dd.sendViaSocket(self.dd.sendMessage(n), n)
 
     def menu(self, d):
         while True:
@@ -272,11 +274,20 @@ class Client():
                 break
             elif resp[0] == 'h':
                 # do the hearbeat
+                if not self.togglehb:
+                    print("Heartbeating is off. Toggle it on by pressing t")
+                    continue
                 nodes = sorted(self.map.keys())
                 # remove the self node
                 nodes.remove(self.seq)
                 for n in nodes:
                     self.dd.sendViaSocket(self.dd.sendMessage(n), n)
+            elif resp[0] == 't':
+                self.togglehb = not self.togglehb
+                print("Heartbeat toggled to {0}".format("ON" if self.togglehb else "OFF"))
+                pass
+            elif resp[0] == 'e':
+                pass
 
     def main(self):
         print('Number of arguments:', len(sys.argv), 'arguments.')

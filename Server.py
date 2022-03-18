@@ -82,7 +82,7 @@ class Server():
                             print("New node {0} added".format(jsonreq['seq']))
                             self.count = self.count - 1
                             if self.count == 0:
-                                print("Maximum Number of nodes connected Server is closing down")
+                                print("Maximum Number of nodes connected. Server is closing down")
                                 s.close()
                                 exit(0)
                             # self.sendNewMap()
