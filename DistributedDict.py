@@ -23,6 +23,10 @@ class DistributedDict:
             self.eventClass = Event
         else:
             self.eventClass = eventClass
+        self.dlogfileName = "Node-{0}-dlog.txt".format(self.nodeid)
+        self.ddfileName = "Node-{0}-dclog.txt".format(self.nodeid)
+
+        self.initializeLogFiles()
 
     # Low level methods
     def insert(self, x):
@@ -34,11 +38,14 @@ class DistributedDict:
             event._op = Operation.INSERT
             event._m = x
             self.events.add(event)
+            self.appendToLog(self.dlogfileName, str(event))
 
             # update the appointment with the timestamp
             x[1].ts = (lamptime, nodeid)
 
             self.calendar[x[0]] = [x[1]]
+            # log
+            self.appendToLog(self.ddfileName, self.displayCalendarstr(), "w+")
         finally:
             self.mutex.release()
         pass
@@ -52,12 +59,16 @@ class DistributedDict:
             event._op = Operation.INSERT
             event._m = x
             self.events.add(event)
+            # log
+            self.appendToLog(self.dlogfileName, str(event))
 
             # update the appointment with the timestamp
             x[1].ts = (lamptime, nodeid)
 
             # appended the value instead inserting
             self.calendar[x[0]].append(x[1])
+            # log
+            self.appendToLog(self.ddfileName, self.displayCalendarstr(), "w+")
         finally:
             self.mutex.release()
 
@@ -69,9 +80,13 @@ class DistributedDict:
             event._op = Operation.DELETE
             event._m = x
             self.events.add(event)
+            # log
+            self.appendToLog(self.dlogfileName, str(event))
 
             r = self.calendar.pop(x[0], None)
             # print(r)
+            # log
+            self.appendToLog(self.ddfileName, self.displayCalendarstr(), "w+")
             pass
         finally:
             self.mutex.release()
@@ -84,9 +99,13 @@ class DistributedDict:
             event._op = Operation.DELETE
             event._m = x
             self.events.add(event)
+            # log
+            self.appendToLog(self.dlogfileName, str(event))
 
             r = self.calendar[x[0]].remove(x[1])
             # print(r)
+            # log
+            self.appendToLog(self.ddfileName, self.displayCalendarstr(), "w+")
             pass
         finally:
             self.mutex.release()
@@ -161,6 +180,9 @@ class DistributedDict:
         #             print("Delete key not in calandar Error {0}".format(dk))
         #         self.calendar.pop(dk, None)
 
+        #update the dictionary log
+        self.appendToLog(self.ddfileName, self.displayCalendarstr(), "w+")
+
         # merge the partial logs
         self.updateMatrixFromReceivedMatrix(matrix, k)
         self.unionevents(pl)
@@ -181,6 +203,7 @@ class DistributedDict:
                 # add to the events
                 self.events.add(e)
                 # log the event
+                self.appendToLog(self.dlogfileName, str(e))
 
     def updateMatrixFromReceivedMatrix(self, receivedMatrix, k):
         i = self.nodeid
@@ -216,10 +239,23 @@ class DistributedDict:
     def getLamportTime(self):
         return self.nodeid, self.matrix[self.nodeid - 1][self.nodeid - 1]
 
+    def initializeLogFiles(self):
+        with open(self.dlogfileName, "w+") as dl:
+            dl.write("This is the beginning of the Distributed log of node {0}\n".format(self.nodeid))
+
+        with open(self.ddfileName, "w+") as dc:
+            dc.write("This is the beginning of the Distributed Calendar log of node {0}\n".format(self.nodeid))
+
     # High level methods
-    def displayCalendar(self):
-        for key, value in self.calendar.items():
-            print(key, ' : ', value)
+    def displayCalendarstr(self):
+        keys = sorted(self.calendar.keys())
+        appendstr = ""
+        for k in keys:
+            appendstr = appendstr + "Timeslot: {0} -> ".format(k)
+            for a in self.calendar[k]:
+                appendstr = appendstr + str(a) + "\t||\t"
+            appendstr = appendstr + "\n"
+        return appendstr
 
     def addAppointment(self, message):
         # Todo: implement the add appointment logic here
@@ -353,13 +389,21 @@ class DistributedDict:
         #     print(c)
         return conflictingAppointments
 
-    def display(self):
+    def appendToLog(self, logname, line, format="a+"):
+        with open(logname, format) as f:
+            try:
+                f.write(line + "\n")
+            except:
+                print("Error writing to the logfile {0} line {1}".format(logname, line))
+
+    def displayCalendar(self):
         print(
             "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
         print("Displaying the calendar of Node {0}".format(self.nodeid))
-        for k, v in self.calendar.items():
+        keys = sorted(self.calendar.keys())
+        for k in keys:
             print("Timeslot: {0} -> ".format(k), end='')
-            for a in v:
+            for a in self.calendar[k]:
                 print(str(a) + "\t||\t", end='')
             print("")
 

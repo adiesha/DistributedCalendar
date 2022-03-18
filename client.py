@@ -242,7 +242,7 @@ class Client():
             resp = input("Choice: ").lower().split()
             if resp[0] == 'd':
                 print("Display Calender")
-                d.display()
+                d.displayCalendar()
                 # d.displayCalendar()
             elif resp[0] == 'm':
                 nodes = resp[1].split(",")
