@@ -301,19 +301,22 @@ class DistributedDict:
 
     def sendViaSocket(self, m, p):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.connect((self.HOST, int(self.map[p])))
+            try:
+                s.connect((self.HOST, int(self.map[p])))
 
-            strReq = {}
-            strReq['pl'] = m[0]
-            strReq['mtx'] = m[1]
-            strReq['nodeid'] = m[2]
-            the_encoding = chardet.detect(pickle.dumps(self.events))['encoding']
-            print(the_encoding)
-            strReq['encoding'] = the_encoding
-            strReq['msg'] = self.events
+                strReq = {}
+                strReq['pl'] = m[0]
+                strReq['mtx'] = m[1]
+                strReq['nodeid'] = m[2]
+                the_encoding = chardet.detect(pickle.dumps(self.events))['encoding']
+                print(the_encoding)
+                strReq['encoding'] = the_encoding
+                strReq['msg'] = self.events
 
-            pickledMessage = pickle.dumps(strReq)
-            s.sendall(pickledMessage)
+                pickledMessage = pickle.dumps(strReq)
+                s.sendall(pickledMessage)
+            except ConnectionRefusedError:
+                print("Connection cannot be established to node {0}".format(p))
 
     def isInternalConflicts(self, timeslot, scheduler, participants, calendar):
         if timeslot not in self.calendar:

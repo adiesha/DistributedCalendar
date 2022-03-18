@@ -206,8 +206,10 @@ class Client():
                             the_encoding = chardet.detect(pickle.dumps(response))['encoding']
                             response['encoding'] = the_encoding
                             pickledMessage = pickle.dumps(response)
-                            conn.sendall(pickledMessage)
-
+                            try:
+                                conn.sendall(pickledMessage)
+                            except:
+                                print("Problem occured while sending the reply to node {0}".format(nid))
                         else:
                             response = {"response": "Failed", "error": "Request should be a dictionary"}
                             the_encoding = chardet.detect(pickle.dumps(response))['encoding']
@@ -313,7 +315,7 @@ class Client():
         self.sendNodePort()
         # need to put following inside the menu
         # self.createThreadToListen()
-        print("Ready to start the Calendar")
+        print("Ready to start the Calendar. Please wait until all the nodes are ready to continue. Then press Enter")
         if input() == "":
             print("Started Creating the Distributed Calendar")
             self.map = self.getMapData()
