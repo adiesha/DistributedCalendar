@@ -1,3 +1,4 @@
+import math
 import pickle
 import socket
 from threading import Lock
@@ -180,7 +181,7 @@ class DistributedDict:
         #             print("Delete key not in calandar Error {0}".format(dk))
         #         self.calendar.pop(dk, None)
 
-        #update the dictionary log
+        # update the dictionary log
         self.appendToLog(self.ddfileName, self.displayCalendarstr(), "w+")
 
         # merge the partial logs
@@ -264,10 +265,12 @@ class DistributedDict:
         timeslot = message[0]
         scheduler = message[1]
         participants = message[2]
+        name = message[3]
         appnmnt = Appointment()
         appnmnt.timeslot = timeslot
         appnmnt.scheduler = scheduler
         appnmnt.participants = participants
+        appnmnt.name = name
 
         # check whether scheduler is a participant
         if not (scheduler in participants):
@@ -417,6 +420,10 @@ class Appointment:
         self.scheduler = None
         self.participants = []
         self.ts = None
+        self.name = ""
+        self.dateoftheappointment = None
+        self.starttime = None
+        self.endtime = None
 
     def isParticipant(self, participant):
         return participant in self.participants
@@ -424,6 +431,22 @@ class Appointment:
     def isScheduler(self, schedulerperson):
         return self.scheduler == schedulerperson
 
+    def calculatedatestartandend(self):
+        weekDays = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+        # number of timeslots = 7*24*2 = 336
+        day = math.ceil(self.timeslot / 48)
+        dayq = self.timeslot // 48
+        halfhour = self.timeslot - dayq * 48
+        self.dateoftheappointment = weekDays[day - 1]
+        self.starttime = str((halfhour) / 2) + " Hr"
+        self.endtime = str((halfhour + 1) / 2) + " Hr"
+
     def __str__(self):
-        return "Timeslot: {0} scheduled by: {1} participants {2} TS: {3}".format(self.timeslot, self.scheduler,
-                                                                                 self.participants, self.ts)
+        self.calculatedatestartandend()
+        return "Timeslot: {0} scheduled by: {1}  Name: {2} participants {3}, Day-Time: {4} at {5} to {6}".format(
+            self.timeslot,
+            self.scheduler,
+            self.name,
+            self.participants,
+            self.dateoftheappointment,
+            self.starttime, self.endtime)
