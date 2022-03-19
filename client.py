@@ -23,6 +23,7 @@ class Client():
         self.dd = None
         self.heartbeatInterval = hb
         self.togglehb = toggleHB
+        self.clientmutex = threading.Lock()
 
     def createJSONReq(self, typeReq, nodes=None, slot=None):
         # Initialize node
@@ -185,6 +186,7 @@ class Client():
                     print(f"Connected by {addr}")
                     while True:
                         data = self.receiveWhole(conn)
+                        self.clientmutex.acquire()
                         if data == b'':
                             break
                         unpickledRequest = pickle.loads(data)
@@ -209,18 +211,20 @@ class Client():
                             try:
                                 conn.sendall(pickledMessage)
                             except:
-                                print("Problem occured while sending the reply to node {0}".format(nid))
+                                print("Problem occurred while sending the reply to node {0}".format(nid))
                         else:
                             response = {"response": "Failed", "error": "Request should be a dictionary"}
                             the_encoding = chardet.detect(pickle.dumps(response))['encoding']
                             response['encoding'] = the_encoding
                             pickledMessage = pickle.dumps(response)
                             conn.sendall(pickledMessage)
+                        self.clientmutex.release()
                         break
 
     def heartbeat(self):
         while (True):
             time.sleep(random.randint(15, self.heartbeatInterval))
+            self.clientmutex.acquire()
             if self.togglehb:
                 print("heartbeating")
                 # do the hearbeat
@@ -229,6 +233,7 @@ class Client():
                 nodes.remove(self.seq)
                 for n in nodes:
                     self.dd.sendViaSocket(self.dd.sendMessage(n), n)
+            self.clientmutex.release()
 
     def menu(self, d):
         while True:
@@ -242,9 +247,12 @@ class Client():
             resp = input("Choice: ").lower().split()
             if resp[0] == 'd':
                 print("Display Calender")
+                self.clientmutex.acquire()
                 d.displayCalendar()
+                self.clientmutex.release()
                 # d.displayCalendar()
             elif resp[0] == 'm':
+                self.clientmutex.acquire()
                 nodes = resp[1].split(",")
                 participants = [int(i) for i in nodes]
                 scheduler = int(d.nodeid)
@@ -262,7 +270,9 @@ class Client():
                         (NP, mtx, nid) = d.sendMessage(p)
                         # send the message
                 # self.createThreadToBroadcast(4, nodes, resp[2])
+                self.clientmutex.release()
             elif resp[0] == 'c':
+                self.clientmutex.acquire()
                 # nodes = resp[1].split(",")
                 # participants = [int(i) for i in nodes]
                 scheduler = int(d.nodeid)
@@ -271,24 +281,31 @@ class Client():
                 success = d.cancelAppointment((timeslot, d.calendar[timeslot][appntment - 1]))
                 print("Cancel appointment was {0}".format("successful" if success else "Unsuccessful"))
                 # self.createThreadToBroadcast(4, nodes, resp[2])
+                self.clientmutex.release()
             elif resp[0] == 'q':
                 print("Quitting")
                 break
             elif resp[0] == 'h':
+                self.clientmutex.acquire()
                 # do the hearbeat
                 if not self.togglehb:
                     print("Heartbeating is off. Toggle it on by pressing t")
+                    self.clientmutex.release()
                     continue
                 nodes = sorted(self.map.keys())
                 # remove the self node
                 nodes.remove(self.seq)
                 for n in nodes:
                     self.dd.sendViaSocket(self.dd.sendMessage(n), n)
+                self.clientmutex.release()
             elif resp[0] == 't':
+                self.clientmutex.acquire()
                 self.togglehb = not self.togglehb
                 print("Heartbeat toggled to {0}".format("ON" if self.togglehb else "OFF"))
+                self.clientmutex.release()
                 pass
             elif resp[0] == 'e':
+                self.clientmutex.acquire()
                 print("Printing Diagnostics")
                 print("Node Id: {0}".format(self.seq))
                 print("Node Map: {0}".format(self.map))
@@ -297,6 +314,7 @@ class Client():
                 print("Client Port: {0}".format(self.clientPort))
                 print("mtx : \n{0}".format(self.dd.matrix))
                 print("Heartbeat Toggle status is {0}".format("ON" if self.togglehb else "OFF"))
+                self.clientmutex.release()
 
     def main(self):
         print('Number of arguments:', len(sys.argv), 'arguments.')
