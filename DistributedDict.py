@@ -186,17 +186,24 @@ class DistributedDict:
 
         # merge the partial logs
         self.updateMatrixFromReceivedMatrix(matrix, k)
-        self.unionevents(NE)
-        for ev in self.events.copy():
+
+        # self.unionevents(NE)
+        copyEvents = self.events.copy()
+        copyEvents.update(NE)
+        for ev in copyEvents.copy():
             needArecord = False
             for j in range(1, self.noOfNodes + 1):
                 if not self.hasRecord(self.matrix, ev, j):
                     needArecord = True
                     break
-            if needArecord:
+            if needArecord and (ev in NE): # if record is needed and in NE, then we need to add to events and log it
+                self.events.add(ev)
+                self.appendToLog(self.dlogfileName, str(ev))
                 pass
-            else:
+            elif ev in self.events: # record is not needed but is in events then remove it from the events
                 self.events.remove(ev)
+            else:
+                print("Record not needed and not in events")
 
     def unionevents(self, pl):
         for e in pl:
