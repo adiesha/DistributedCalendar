@@ -7,8 +7,8 @@ import time
 
 class Server():
 
-    def __init__(self, maxNodes=4):
-        self.HOST = "127.0.0.1"  # Standard loopback interface address (localhost)
+    def __init__(self, maxNodes=4, host="127.0.0.1"):
+        self.HOST = host  # Standard loopback interface address (localhost)
         self.PORT = 65431  # Port to listen on (non-privileged ports are > 1023)
         self.mutex = threading.Lock()
         self.seq = 0
@@ -67,7 +67,7 @@ class Server():
                             print(y)
                             conn.sendall(str.encode(y))
                         if reqType == "2":
-                            self.map[jsonreq['seq']] = jsonreq['port']
+                            self.map[jsonreq['seq']] = (addr[0], jsonreq['port'])
 
                             # create response
                             x = {"response": "success"}

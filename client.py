@@ -15,10 +15,10 @@ from DistributedDict import DistributedDict
 
 class Client():
 
-    def __init__(self, clientPort=62344, hb=20, toggleHB=False):
-        self.HOST = "127.0.0.1"  # The server's hostname or IP address
-        self.SERVER_PORT = 65431  # The port used by the server
-        self.clientPort = clientPort
+    def __init__(self, host="127.0.0.1", serverport=65431, hb=20, toggleHB=False):
+        self.HOST = host  # The server's hostname or IP address
+        self.SERVER_PORT = serverport  # The port used by the server
+        self.clientPort = None
         self.seq = None
         self.map = None
         self.dd = None
@@ -124,7 +124,7 @@ class Client():
             resp = self.getJsonObj(data.decode("utf-8"))
             resp2 = {}
             for k, v in resp.items():
-                resp2[int(k)] = int(v)
+                resp2[int(k)] = (v[0], int(v[1]))
 
             print(resp2)
             s.close()

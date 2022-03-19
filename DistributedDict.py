@@ -341,7 +341,7 @@ class DistributedDict:
     def sendViaSocket(self, m, p):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             try:
-                s.connect((self.HOST, int(self.map[p])))
+                s.connect((self.map[p][0], int(self.map[p][1])))
 
                 strReq = {}
                 strReq['pl'] = m[0]
