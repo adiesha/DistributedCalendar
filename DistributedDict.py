@@ -1,4 +1,4 @@
-import math
+import datetime
 import pickle
 import socket
 from threading import Lock
@@ -186,7 +186,7 @@ class DistributedDict:
 
         # merge the partial logs
         self.updateMatrixFromReceivedMatrix(matrix, k)
-        self.unionevents(pl)
+        self.unionevents(NE)
         for ev in self.events.copy():
             needArecord = False
             for j in range(1, self.noOfNodes + 1):
@@ -249,10 +249,11 @@ class DistributedDict:
 
     # High level methods
     def displayCalendarstr(self):
+        weekDays = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
         keys = sorted(self.calendar.keys())
         appendstr = ""
         for k in keys:
-            appendstr = appendstr + "Timeslot: {0} -> ".format(k)
+            appendstr = appendstr + "Day:Timeslot: {0}:{1} -> ".format(weekDays[k - 1], k)
             for a in self.calendar[k]:
                 appendstr = appendstr + str(a) + "\t||\t"
             appendstr = appendstr + "\n"
@@ -266,11 +267,16 @@ class DistributedDict:
         scheduler = message[1]
         participants = message[2]
         name = message[3]
+        startt = (message[4])
+        endt = (message[5])
+
         appnmnt = Appointment()
         appnmnt.timeslot = timeslot
         appnmnt.scheduler = scheduler
         appnmnt.participants = participants
         appnmnt.name = name
+        appnmnt.starttime = appnmnt.starttime.replace(hour=startt[0], minute=startt[1])
+        appnmnt.endtime = appnmnt.starttime.replace(hour=endt[0], minute=endt[1])
 
         # check whether scheduler is a participant
         if not (scheduler in participants):
@@ -279,7 +285,8 @@ class DistributedDict:
 
         # check for internal conflicts
 
-        if self.isInternalConflicts(timeslot, scheduler, participants, self.calendar):
+        if self.isInternalConflicts(timeslot, scheduler, participants, self.calendar, appnmnt.starttime,
+                                    appnmnt.endtime):
             print("Appointment conflict for timeslot {0} scheduler {1} participants {2} ".format(timeslot, scheduler,
                                                                                                  participants))
             return False
@@ -357,14 +364,14 @@ class DistributedDict:
             except ConnectionRefusedError:
                 print("Connection cannot be established to node {0}".format(p))
 
-    def isInternalConflicts(self, timeslot, scheduler, participants, calendar):
+    def isInternalConflicts(self, timeslot, scheduler, participants, calendar, st, et):
         if timeslot not in self.calendar:
             return False
         else:
             appnmnts = self.calendar[timeslot]
             for a in appnmnts:
                 for p in participants:
-                    if a.isParticipant(p):
+                    if a.isParticipant(p) and a.checkappttimeconflicts(st, et):
                         return True
         return False
 
@@ -385,9 +392,10 @@ class DistributedDict:
             for j in range(i + 1, len(apps)):
                 # print(apps[j].participants)
                 if apps[j] not in conflictingAppointments:
-                    if any(item in apps[i].participants for item in apps[j].participants):
+                    if any(item in apps[i].participants for item in apps[j].participants) and apps[
+                        i].checkappttimeconflicts(apps[j].starttime, apps[j].endtime):
                         conflictingAppointments.append(apps[j])
-            # print("8888888")
+
         # for c in conflictingAppointments:
         #     print(c)
         return conflictingAppointments
@@ -400,12 +408,13 @@ class DistributedDict:
                 print("Error writing to the logfile {0} line {1}".format(logname, line))
 
     def displayCalendar(self):
+        weekDays = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
         print(
             "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
         print("Displaying the calendar of Node {0}".format(self.nodeid))
         keys = sorted(self.calendar.keys())
         for k in keys:
-            print("Timeslot: {0} -> ".format(k), end='')
+            print("Day:Timeslot: {0}:{1} -> ".format(weekDays[k - 1], k), end='')
             for a in self.calendar[k]:
                 print(str(a) + "\t||\t", end='')
             print("")
@@ -422,8 +431,8 @@ class Appointment:
         self.ts = None
         self.name = ""
         self.dateoftheappointment = None
-        self.starttime = None
-        self.endtime = None
+        self.starttime = datetime.time(0, 0, 0)
+        self.endtime = datetime.time(0, 0, 0)
 
     def isParticipant(self, participant):
         return participant in self.participants
@@ -433,13 +442,17 @@ class Appointment:
 
     def calculatedatestartandend(self):
         weekDays = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
-        # number of timeslots = 7*24*2 = 336
-        day = math.ceil(self.timeslot / 48)
-        dayq = self.timeslot // 48
-        halfhour = self.timeslot - dayq * 48
-        self.dateoftheappointment = weekDays[day - 1]
-        self.starttime = str((halfhour) / 2) + " Hr"
-        self.endtime = str((halfhour + 1) / 2) + " Hr"
+        day = self.timeslot - 1
+        self.dateoftheappointment = weekDays[day]
+
+    def checkappttimeconflicts(self, st, et):
+        if (self.starttime <= st <= self.endtime) or (self.starttime <= et <= self.endtime):
+            print("Appointment time conflict (intersection) detected")
+            return True
+        elif (st < self.starttime) and (self.endtime < et):
+            print("Appointment time conflict (overlap) detected")
+            return True
+        return False
 
     def __str__(self):
         self.calculatedatestartandend()

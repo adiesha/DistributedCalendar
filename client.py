@@ -1,4 +1,5 @@
 # echo-client.py
+import datetime
 import json
 import pickle
 import random
@@ -263,12 +264,18 @@ class Client():
                 scheduler = int(d.nodeid)
                 timeslot = int(resp[2])
                 print(participants)
+                starthour, startminute = int(resp[3].split('.')[0]), int(resp[3].split('.')[1])
+                print("Start time {0}".format(datetime.time(hour=starthour, minute=startminute)))
+                endhour, endminute = int(resp[4].split('.')[0]), int(resp[4].split('.')[1])
+                print("End time {0}".format(datetime.time(hour=endhour, minute=endminute)))
                 # Assigning random name
                 letters = string.ascii_lowercase
                 name = "apt:" + "".join(random.choice(letters) for i in range(10))
-                if len(resp) > 3:
-                    name = "apt:" + ' '.join(str(item) for item in resp[3:len(resp)])
-                success = d.addAppointment((timeslot, scheduler, participants, name))
+                if len(resp) > 5:
+                    name = "apt:" + ' '.join(str(item) for item in resp[5:len(resp)])
+                    print("Appointment Name: {0}".format(name))
+                success = d.addAppointment(
+                    (timeslot, scheduler, participants, name, (starthour, startminute), (endhour, endminute)))
                 if not success:
                     print("Conflict Detected. Cannot continue with the appointment")
                 else:
@@ -282,12 +289,17 @@ class Client():
                 # self.createThreadToBroadcast(4, nodes, resp[2])
                 self.clientmutex.release()
             elif resp[0] == 'c':
-                self.clientmutex.acquire()
+
                 # nodes = resp[1].split(",")
                 # participants = [int(i) for i in nodes]
                 scheduler = int(d.nodeid)
                 timeslot = int(resp[1])
                 appntment = int(resp[2])
+                if (timeslot not in d.calendar) or (len(d.calendar[timeslot]) < appntment):
+                    print("Timeslot or Appointment does not exist")
+                    print("Appointment cancellation was aborted")
+                    continue
+                self.clientmutex.acquire()
                 success = d.cancelAppointment((timeslot, d.calendar[timeslot][appntment - 1]))
                 print("Cancel appointment was {0}".format("successful" if success else "Unsuccessful"))
                 # self.createThreadToBroadcast(4, nodes, resp[2])
@@ -336,28 +348,32 @@ class Client():
                     name = input("Input apt Name: ")
                     day = int(input("Input Day [1-7] [Monday to Sunday]: "))
 
-                    time = input("Input Time. Use 24 hour standard: Ex: 12.30: ")
+                    time = input("Input start Time. Use 24 hour standard: Ex: 12.30: ")
                     t = time.split('.')
-                    hour = int(t[0])
-                    halfhour = int(t[1])
-                    timeslot = (day - 1) * 48 + (2 * hour) + (0 if halfhour == 0 else 1)
+                    starthour = int(t[0])
+                    startminute = int(t[1])
+                    print(datetime.time(hour=starthour, minute=startminute))
+                    timeslot = day
+
+                    endtime = input("Input end time. Use 24 hour standard. Ex: 14.30: ")
+                    et = endtime.split('.')
+                    endhour = int(et[0])
+                    endminute = int(et[1])
+                    print("End time {0}".format(datetime.time(hour=endhour, minute=endminute)))
 
                     self.clientmutex.acquire()
                     scheduler = int(d.nodeid)
                     name = "apt:" + name
-                    success = d.addAppointment((timeslot, scheduler, participants, name))
+                    success = d.addAppointment(
+                        (timeslot, scheduler, participants, name, (starthour, startminute), (endhour, endminute)))
                     if not success:
                         print("Conflict Detected. Cannot continue with the appointment")
                     self.clientmutex.release()
                 elif m == 'c':
                     print("Interactive mode for cancelling")
                     day = int(input("Input Appointment Day [1-7] [Monday to Sunday]: "))
-                    time = input("Input Appointment Time. Use 24 hour standard: Ex: 12.30: ")
-                    t = time.split('.')
-                    hour = int(t[0])
-                    halfhour = int(t[1])
-                    timeslot = (day - 1) * 48 + (2 * hour) + (0 if halfhour == 0 else 1)
-                    aptn = int(input("Input appointment number"))
+                    timeslot = day
+                    aptn = int(input("Input appointment number: "))
 
                     self.clientmutex.acquire()
 
