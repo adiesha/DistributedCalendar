@@ -3,6 +3,7 @@ import json
 import pickle
 import random
 import socket
+import string
 import sys
 import threading
 import time
@@ -242,6 +243,10 @@ class Client():
             # Make an appoint with node 1,2 and 3 for slot 2: m 1,2,3 2
             print("Make Appointment\t[m <node/s> <slot>]")
             print("Cancel Appointment\t[c <node/s> <slot>]")
+            print("Press i for interactive appointments")
+            print("Press t to Toggle heartbeats service")
+            print("Press h to send heartbeat manually")
+            print("Press e to print diagnostics")
             print("Quit    \t[q]")
 
             resp = input("Choice: ").lower().split()
@@ -258,7 +263,12 @@ class Client():
                 scheduler = int(d.nodeid)
                 timeslot = int(resp[2])
                 print(participants)
-                success = d.addAppointment((timeslot, scheduler, participants))
+                # Assigning random name
+                letters = string.ascii_lowercase
+                name = "apt:" + "".join(random.choice(letters) for i in range(10))
+                if len(resp) > 3:
+                    name = "apt:" + ' '.join(str(item) for item in resp[3:len(resp)])
+                success = d.addAppointment((timeslot, scheduler, participants, name))
                 if not success:
                     print("Conflict Detected. Cannot continue with the appointment")
                 else:
@@ -315,6 +325,50 @@ class Client():
                 print("mtx : \n{0}".format(self.dd.matrix))
                 print("Heartbeat Toggle status is {0}".format("ON" if self.togglehb else "OFF"))
                 self.clientmutex.release()
+            elif resp[0] == 'i':
+                print("Interactive mode initiated")
+                m = input("Input m to make appointment c to cancel appointment: ")
+                if m == 'm':
+                    nodes = input("input participants: ")
+                    tempnodes = nodes.split(",")
+                    participants = [int(i) for i in tempnodes]
+                    print(participants)
+                    name = input("Input apt Name: ")
+                    day = int(input("Input Day [1-7] [Monday to Sunday]: "))
+
+                    time = input("Input Time. Use 24 hour standard: Ex: 12.30: ")
+                    t = time.split('.')
+                    hour = int(t[0])
+                    halfhour = int(t[1])
+                    timeslot = (day - 1) * 48 + (2 * hour) + (0 if halfhour == 0 else 1)
+
+                    self.clientmutex.acquire()
+                    scheduler = int(d.nodeid)
+                    name = "apt:" + name
+                    success = d.addAppointment((timeslot, scheduler, participants, name))
+                    if not success:
+                        print("Conflict Detected. Cannot continue with the appointment")
+                    self.clientmutex.release()
+                elif m == 'c':
+                    print("Interactive mode for cancelling")
+                    day = int(input("Input Appointment Day [1-7] [Monday to Sunday]: "))
+                    time = input("Input Appointment Time. Use 24 hour standard: Ex: 12.30: ")
+                    t = time.split('.')
+                    hour = int(t[0])
+                    halfhour = int(t[1])
+                    timeslot = (day - 1) * 48 + (2 * hour) + (0 if halfhour == 0 else 1)
+                    aptn = int(input("Input appointment number"))
+
+                    self.clientmutex.acquire()
+
+                    appntment = aptn
+                    success = d.cancelAppointment((timeslot, d.calendar[timeslot][appntment - 1]))
+                    print("Cancel appointment was {0}".format("successful" if success else "Unsuccessful"))
+                    # self.createThreadToBroadcast(4, nodes, resp[2])
+                    self.clientmutex.release()
+
+                else:
+                    print("Incorrect input")
 
     def main(self):
         print('Number of arguments:', len(sys.argv), 'arguments.')
