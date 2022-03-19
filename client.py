@@ -391,9 +391,12 @@ class Client():
         print('Argument List:', str(sys.argv))
 
         if len(sys.argv) > 1:
-            print("Client's listening port {0}".format(sys.argv[1]))
-            self.clientPort = sys.argv[1]
-            self.HOST = sys.argv[2]
+            print("Server ip is {0}".format(sys.argv[1]))
+
+        if len(sys.argv) > 2:
+            print("Client's listening port {0}".format(sys.argv[2]))
+            self.clientPort = int(sys.argv[2])
+
         else:
             print("User did not choose a port for the node. Random port between 55000-63000 will be selected")
             port = random.randint(55000, 63000)
