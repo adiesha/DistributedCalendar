@@ -204,8 +204,6 @@ class Event:
         hash = hashlib.sha1()
         hash.update(str(time.time_ns()).encode('utf-8') + str(random.randint(1, 1000000)).encode('utf-8'))
         self.id = hash.hexdigest()
-        print(self.id)
-        print(type(self.id))
         self.nodeId = nodeid
         self.ts = timestamp
         self._op = None
