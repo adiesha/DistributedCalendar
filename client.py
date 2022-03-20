@@ -392,6 +392,8 @@ class Client():
 
         if len(sys.argv) > 1:
             print("Server ip is {0}".format(sys.argv[1]))
+            self.HOST = sys.argv[1]
+            print("Server Ip updated")
 
         if len(sys.argv) > 2:
             print("Client's listening port {0}".format(sys.argv[2]))
