@@ -1,9 +1,9 @@
 import datetime
+import logging
 import pickle
 import socket
 from threading import Lock
 
-import chardet
 import numpy as np
 
 from DistributedLog import Event, Operation
@@ -149,6 +149,9 @@ class DistributedDict:
                     print(
                         "Appointment {0} is in create and delete list, therefore it will not be added to the dictionary".format(
                             e._m[1]))
+                    logging.debug(
+                        "Appointment {0} is in create and delete list, therefore it will not be added to the dictionary".format(
+                            e._m[1]))
             elif e._op == Operation.DELETE:
                 if e._m[1] not in (tempCreateKeyList[e._m[0]] if e._m[0] in tempCreateKeyList else []):
                     # we need to delete this value from the dictionary
@@ -161,10 +164,11 @@ class DistributedDict:
                             print("Couldn't find the appointment to delete")
                         # make sure to write logic to remove the key if list is empty after this
                         if not self.calendar[e._m[0]]:
-                            print("No value for key {0} in the dictionary. Removing the key".format(e._m[0]))
+                            # print("No values for key {0} in the dictionary. Removing the key".format(e._m[0]))
+                            logging.debug("No values for key {0} in the dictionary. Removing the key".format(e._m[0]))
                             self.calendar.pop(e._m[0])
                     else:
-                        print("Delete key not in calendar Error {0}".format(e._m[0]))
+                        logging.debug("Delete key not in calendar Error {0}".format(e._m[0]))
 
         # for ck in tempCreateKeyList:
         #     if ck not in tempDeleteKeyLsit:
@@ -196,14 +200,14 @@ class DistributedDict:
                 if not self.hasRecord(self.matrix, ev, j):
                     needArecord = True
                     break
-            if needArecord and (ev in NE): # if record is needed and in NE, then we need to add to events and log it
+            if needArecord and (ev in NE):  # if record is needed and in NE, then we need to add to events and log it
                 self.events.add(ev)
                 self.appendToLog(self.dlogfileName, str(ev))
                 pass
-            elif ev in self.events: # record is not needed but is in events then remove it from the events
+            elif ev in self.events:  # record is not needed but is in events then remove it from the events
                 self.events.remove(ev)
             else:
-                print("Record not needed and not in events")
+                logging.debug("Record not needed and not in events")
 
     def unionevents(self, pl):
         for e in pl:
@@ -288,6 +292,7 @@ class DistributedDict:
         # check whether scheduler is a participant
         if not (scheduler in participants):
             print("Scheduler is not a participant. Scheduler must be a participant")
+            logging.debug("Scheduler is not a participant. Scheduler must be a participant")
             return False
 
         # check for internal conflicts
@@ -296,15 +301,21 @@ class DistributedDict:
                                     appnmnt.endtime):
             print("Appointment conflict for timeslot {0} scheduler {1} participants {2} ".format(timeslot, scheduler,
                                                                                                  participants))
+            logging.debug(
+                "Appointment conflict for timeslot {0} scheduler {1} participants {2} ".format(timeslot, scheduler,
+                                                                                               participants))
             return False
         else:
             print("No Internal conflict detected. Moving on to do the schedule the appointment")
+            logging.debug("No Internal conflict detected. Moving on to do the schedule the appointment")
             # if timeslot is not used then we need to insert the timeslot and send messages
             if timeslot not in self.calendar:
                 print('Timeslot is not used in the local calendar')
                 self.insert((timeslot, appnmnt))
             else:
                 print("Timeslot already exist. Moving on to adding non conflicting appointment to the local calendar")
+                logging.debug(
+                    "Timeslot already exist. Moving on to adding non conflicting appointment to the local calendar")
                 self.appendValue((timeslot, appnmnt))
 
             tempParticipants = participants.copy()
@@ -326,11 +337,13 @@ class DistributedDict:
         # check whether canceler is a participant
         if not (canceler in participants):
             print("Canceler is not an participant of the appointment")
+            logging.debug("Canceler is not an participant of the appointment")
             return False
         else:
             # check if it is delete or deletevalue
             if timeslot not in self.calendar:
-                print("Error! trying to delete appintment at a timeslot that doesn't exist")
+                print("Error! trying to delete appointment at a timeslot that doesn't exist")
+                logging.debug("Error! trying to delete appointment at a timeslot that doesn't exist")
                 return False
             else:
                 if len(self.calendar[timeslot]) > 1:
@@ -361,15 +374,16 @@ class DistributedDict:
                 strReq['pl'] = m[0]
                 strReq['mtx'] = m[1]
                 strReq['nodeid'] = m[2]
-                the_encoding = chardet.detect(pickle.dumps(self.events))['encoding']
-                print(the_encoding)
-                strReq['encoding'] = the_encoding
+                # the_encoding = chardet.detect(pickle.dumps(self.events))['encoding']
+                # print(the_encoding)
+                # strReq['encoding'] = the_encoding
                 strReq['msg'] = self.events
 
                 pickledMessage = pickle.dumps(strReq)
                 s.sendall(pickledMessage)
             except ConnectionRefusedError:
                 print("Connection cannot be established to node {0}".format(p))
+                logging.error("Connection cannot be established to node {0}".format(p))
 
     def isInternalConflicts(self, timeslot, scheduler, participants, calendar, st, et):
         if timeslot not in self.calendar:
@@ -413,6 +427,7 @@ class DistributedDict:
                 f.write(line + "\n")
             except:
                 print("Error writing to the logfile {0} line {1}".format(logname, line))
+                logging.error("Error writing to the logfile {0} line {1}".format(logname, line))
 
     def displayCalendar(self):
         weekDays = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
@@ -455,9 +470,11 @@ class Appointment:
     def checkappttimeconflicts(self, st, et):
         if (self.starttime <= st <= self.endtime) or (self.starttime <= et <= self.endtime):
             print("Appointment time conflict (intersection) detected")
+            logging.debug("Appointment time conflict (intersection) detected")
             return True
         elif (st < self.starttime) and (self.endtime < et):
             print("Appointment time conflict (overlap) detected")
+            logging.debug("Appointment time conflict (overlap) detected")
             return True
         return False
 

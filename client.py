@@ -1,6 +1,8 @@
 # echo-client.py
 import datetime
 import json
+import logging
+import os
 import pickle
 import random
 import socket
@@ -8,8 +10,6 @@ import string
 import sys
 import threading
 import time
-
-import chardet
 
 from DistributedDict import DistributedDict
 
@@ -81,6 +81,11 @@ class Client():
             self.seq = int(resp['seq'])
             print("sequence: " + str(self.seq))
             s.close()
+        currrent_dir = os.getcwd()
+        finallogdir = os.path.join(currrent_dir, 'log')
+        if not os.path.exists(finallogdir):
+            os.mkdir(finallogdir)
+        logging.basicConfig(filename="log/{0}.log".format(self.seq), level=logging.DEBUG, filemode='w')
 
     def sendNodePort(self):
         # establish connection with server and give info about the client port
@@ -185,14 +190,16 @@ class Client():
                 s.listen()
                 conn, addr = s.accept()
                 with conn:
-                    print(f"Connected by {addr}")
+                    # print(f"Connected by {addr}")
+                    logging.debug(f"Connected by {addr}")
                     while True:
                         data = self.receiveWhole(conn)
                         self.clientmutex.acquire()
                         if data == b'':
                             break
                         unpickledRequest = pickle.loads(data)
-                        print(unpickledRequest)
+                        # print(unpickledRequest)
+                        logging.debug(unpickledRequest)
                         if isinstance(unpickledRequest, dict):
                             # join the partial log
                             np = unpickledRequest['pl']
@@ -207,8 +214,8 @@ class Client():
                             # create message receive event
                             # send the message success request
                             response = {"response": "Success"}
-                            the_encoding = chardet.detect(pickle.dumps(response))['encoding']
-                            response['encoding'] = the_encoding
+                            # the_encoding = chardet.detect(pickle.dumps(response))['encoding']
+                            # response['encoding'] = the_encoding
                             pickledMessage = pickle.dumps(response)
                             try:
                                 conn.sendall(pickledMessage)
@@ -216,8 +223,8 @@ class Client():
                                 print("Problem occurred while sending the reply to node {0}".format(nid))
                         else:
                             response = {"response": "Failed", "error": "Request should be a dictionary"}
-                            the_encoding = chardet.detect(pickle.dumps(response))['encoding']
-                            response['encoding'] = the_encoding
+                            # the_encoding = chardet.detect(pickle.dumps(response))['encoding']
+                            # response['encoding'] = the_encoding
                             pickledMessage = pickle.dumps(response)
                             conn.sendall(pickledMessage)
                         self.clientmutex.release()
@@ -225,10 +232,11 @@ class Client():
 
     def heartbeat(self):
         while (True):
-            time.sleep(random.randint(15, self.heartbeatInterval))
+            time.sleep(random.randint(10, self.heartbeatInterval))
             self.clientmutex.acquire()
             if self.togglehb:
-                print("heartbeating")
+                # print("heartbeating")
+                logging.debug("heartbeating")
                 # do the hearbeat
                 nodes = sorted(self.map.keys())
                 # remove the self node
@@ -242,7 +250,7 @@ class Client():
             print("Display Calender\t[d]")
             # Make an appoint with node 2 for slot 2: m 2 2
             # Make an appoint with node 1,2 and 3 for slot 2: m 1,2,3 2
-            print("Make Appointment\t[m <node/s> <slot>]")
+            print("Make Appointment\t[m <node/s> <slot> <start time> <end time> <name>]")
             print("Cancel Appointment\t[c <node/s> <slot>]")
             print("Press i for interactive appointments")
             print("Press t to Toggle heartbeats service")
@@ -251,6 +259,9 @@ class Client():
             print("Quit    \t[q]")
 
             resp = input("Choice: ").lower().split()
+            if len(resp) < 1:
+                print("Not a correct input")
+                continue
             if resp[0] == 'd':
                 print("Display Calender")
                 self.clientmutex.acquire()
@@ -314,6 +325,8 @@ class Client():
                     print("Heartbeating is off. Toggle it on by pressing t")
                     self.clientmutex.release()
                     continue
+                print("Manual heartbeat")
+                logging.debug("Manual heartbeat")
                 nodes = sorted(self.map.keys())
                 # remove the self node
                 nodes.remove(self.seq)
@@ -324,6 +337,7 @@ class Client():
                 self.clientmutex.acquire()
                 self.togglehb = not self.togglehb
                 print("Heartbeat toggled to {0}".format("ON" if self.togglehb else "OFF"))
+                logging.debug("Heartbeat toggled to {0}".format("ON" if self.togglehb else "OFF"))
                 self.clientmutex.release()
                 pass
             elif resp[0] == 'e':
