@@ -199,15 +199,16 @@ class DistributedDict:
             for j in range(1, self.noOfNodes + 1):
                 if not self.hasRecord(self.matrix, ev, j):
                     needArecord = True
-                    break
-            if needArecord and (ev in NE):  # if record is needed and in NE, then we need to add to events and log it
-                self.events.add(ev)
-                self.appendToLog(self.dlogfileName, str(ev))
-                pass
-            elif ev in self.events:  # record is not needed but is in events then remove it from the events
-                self.events.remove(ev)
+            if needArecord:  # if record is needed and in NE, then we need to add to events and log it
+                if ev in NE:
+                    self.events.add(ev)
+                    self.appendToLog(self.dlogfileName, str(ev))
+                    pass
             else:
-                logging.debug("Record not needed and not in events")
+                if ev in self.events:  # record is not needed but is in events then remove it from the events
+                    self.events.remove(ev)
+            # else:
+            #     logging.debug("Record not needed and not in events")
 
     def unionevents(self, pl):
         for e in pl:
