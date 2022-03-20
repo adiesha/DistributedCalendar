@@ -47,6 +47,7 @@ class Server():
 
     def main(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            print("Server IP for binding is {0} Server port for binding is {1}".format(self.HOST, self.PORT))
             s.bind((self.HOST, self.PORT))
             while (True):
                 s.listen()
@@ -99,5 +100,11 @@ if __name__ == '__main__':
     else:
         print("Maximum number of nodes was not inputted. Default value is 4")
 
-    serv = Server(mxnodes)
+    defaultServerhost = "127.0.0.1"
+    if len(sys.argv) > 2:
+        print("Server IP is inputted {0}".format(sys.argv[2]))
+        defaultServerhost = sys.argv[2]
+    else:
+        print("Server IP was not given -> default to localhost 127.0.0.1")
+    serv = Server(mxnodes, defaultServerhost)
     serv.main()
