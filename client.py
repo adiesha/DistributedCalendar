@@ -16,9 +16,10 @@ from DistributedDict import DistributedDict
 
 class Client():
 
-    def __init__(self, host="127.0.0.1", serverport=65431, hb=20, toggleHB=False):
+    def __init__(self, host="127.0.0.1", clientip="127.0.0.1", serverport=65431, hb=20, toggleHB=False):
         self.HOST = host  # The server's hostname or IP address
         self.SERVER_PORT = serverport  # The port used by the server
+        self.clientip = clientip
         self.clientPort = None
         self.seq = None
         self.map = None
@@ -184,8 +185,8 @@ class Client():
 
     def ReceiveMessageFunct(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            print("started listening to port {0}".format(self.clientPort))
-            s.bind((self.HOST, self.clientPort))
+            print("started listening to clientip {0} port {1}".format(self.clientip, self.clientPort))
+            s.bind((self.clientip, self.clientPort))
             while (True):
                 s.listen()
                 conn, addr = s.accept()
@@ -410,9 +411,16 @@ class Client():
             print("Server Ip updated")
 
         if len(sys.argv) > 2:
-            print("Client's listening port {0}".format(sys.argv[2]))
-            self.clientPort = int(sys.argv[2])
+            print("Client's ip is {0}".format(sys.argv[2]))
+            self.clientip = sys.argv[2]
 
+        else:
+            print("User did not choose a client ip default is 127.0.0.1")
+            self.clientip = "127.0.0.1"
+
+        if len(sys.argv) > 3:
+            print("user inputted client port {0}".format(sys.argv[3]))
+            self.clientPort = int(sys.argv[3])
         else:
             print("User did not choose a port for the node. Random port between 55000-63000 will be selected")
             port = random.randint(55000, 63000)
