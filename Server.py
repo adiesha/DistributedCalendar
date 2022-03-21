@@ -1,17 +1,19 @@
 import json
 import socket
-import time
+import sys
 import threading
+import time
 
 
 class Server():
 
-    def __init__(self):
-        self.HOST = "127.0.0.1"  # Standard loopback interface address (localhost)
+    def __init__(self, maxNodes=4, host="127.0.0.1"):
+        self.HOST = host  # Standard loopback interface address (localhost)
         self.PORT = 65431  # Port to listen on (non-privileged ports are > 1023)
         self.mutex = threading.Lock()
         self.seq = 0
         self.map = {}
+        self.count = maxNodes
 
     def getNewSeq(self):
         self.mutex.acquire()
@@ -35,7 +37,7 @@ class Server():
         thread.daemon = True
         thread.start()
 
-    def sendMap(self,):        
+    def sendMap(self, ):
         for key, value in self.map.items():
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.connect((self.HOST, int(value)))
@@ -45,6 +47,7 @@ class Server():
 
     def main(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            print("Server IP for binding is {0} Server port for binding is {1}".format(self.HOST, self.PORT))
             s.bind((self.HOST, self.PORT))
             while (True):
                 s.listen()
@@ -65,7 +68,7 @@ class Server():
                             print(y)
                             conn.sendall(str.encode(y))
                         if reqType == "2":
-                            self.map[jsonreq['seq']] = jsonreq['port']
+                            self.map[jsonreq['seq']] = (addr[0], jsonreq['port'])
 
                             # create response
                             x = {"response": "success"}
@@ -77,9 +80,30 @@ class Server():
                             y = json.dumps(self.map)
                             conn.sendall(str.encode(y))
                             print("New node {0} added".format(jsonreq['seq']))
-                            self.sendNewMap()
+                            self.count = self.count - 1
+                            print("Nodes left to be informed: {0}".format(str(self.count)))
+                            if self.count == 0:
+                                print("Maximum Number of nodes connected. Server is closing down")
+                                s.close()
+                                exit(0)
+                            # self.sendNewMap()
 
 
 if __name__ == '__main__':
-    serv = Server()
+    print('Number of arguments:', len(sys.argv), 'arguments.')
+    print('Argument List:', str(sys.argv))
+    mxnodes = 4
+    if len(sys.argv) > 1:
+        print("Maximum Number of nodes allowed {0}".format(sys.argv[1]))
+        mxnodes = int(sys.argv[1])
+    else:
+        print("Maximum number of nodes was not inputted. Default value is 4")
+
+    defaultServerhost = "127.0.0.1"
+    if len(sys.argv) > 2:
+        print("Server IP is inputted {0}".format(sys.argv[2]))
+        defaultServerhost = sys.argv[2]
+    else:
+        print("Server IP was not given -> default to localhost 127.0.0.1")
+    serv = Server(mxnodes, defaultServerhost)
     serv.main()

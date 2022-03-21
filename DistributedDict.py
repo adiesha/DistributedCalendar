@@ -1,9 +1,12 @@
+import datetime
+import logging
+import pickle
+import socket
 from threading import Lock
 
-import hashlib
-import random
-import time
 import numpy as np
+
+from DistributedLog import Event, Operation
 
 
 class DistributedDict:
@@ -12,45 +15,105 @@ class DistributedDict:
         self.port = clientport
         self.nodeid = nodeid
         self.map = nodemap
-        self.log = set()
         self.calendar = {}
         self.mutex = Lock()
         self.noOfNodes = len(nodemap)
+        self.events = set()
         self.matrix = np.zeros((self.noOfNodes, self.noOfNodes), dtype=np.int32)
         if eventClass is None:
             self.eventClass = Event
         else:
             self.eventClass = eventClass
+        self.dlogfileName = "Node-{0}-dlog.txt".format(self.nodeid)
+        self.ddfileName = "Node-{0}-dclog.txt".format(self.nodeid)
+
+        self.initializeLogFiles()
 
     # Low level methods
-    def insert(self, nodes, slot):
+    def insert(self, x):
         # x should be a key value pair
         self.mutex.acquire()
         try:
             nodeid, lamptime = self.getNewLamportTimestamp()
-            event = Event(nodes, self.nodeid, (nodeid, lamptime))
-            event._op = 1
-            event._m = slot
-            self.log.add(event)
+            event = Event(self.nodeid, (nodeid, lamptime))
+            event._op = Operation.INSERT
+            event._m = x
+            self.events.add(event)
+            self.appendToLog(self.dlogfileName, str(event))
+
+            # update the appointment with the timestamp
+            x[1].ts = (lamptime, nodeid)
+
+            self.calendar[x[0]] = [x[1]]
+            # log
+            self.appendToLog(self.ddfileName, self.displayCalendarstr(), "w+")
         finally:
             self.mutex.release()
         pass
 
-    def delete(self, nodes, slot):
+    def appendValue(self, x):
+        # x should be a key value pair
         self.mutex.acquire()
-        nodes = [int(item) for item in nodes]
         try:
             nodeid, lamptime = self.getNewLamportTimestamp()
-            event = Event(nodes, self.nodeid, (nodeid, lamptime))
-            event._op = 2
-            event._m = slot
-            self.log.add(event)
+            event = Event(self.nodeid, (nodeid, lamptime))
+            event._op = Operation.INSERT
+            event._m = x
+            self.events.add(event)
+            # log
+            self.appendToLog(self.dlogfileName, str(event))
+
+            # update the appointment with the timestamp
+            x[1].ts = (lamptime, nodeid)
+
+            # appended the value instead inserting
+            self.calendar[x[0]].append(x[1])
+            # log
+            self.appendToLog(self.ddfileName, self.displayCalendarstr(), "w+")
+        finally:
+            self.mutex.release()
+
+    def delete(self, x):
+        self.mutex.acquire()
+        try:
+            nodeid, lamptime = self.getNewLamportTimestamp()
+            event = Event(self.nodeid, (nodeid, lamptime))
+            event._op = Operation.DELETE
+            event._m = x
+            self.events.add(event)
+            # log
+            self.appendToLog(self.dlogfileName, str(event))
+
+            r = self.calendar.pop(x[0], None)
+            # print(r)
+            # log
+            self.appendToLog(self.ddfileName, self.displayCalendarstr(), "w+")
+            pass
+        finally:
+            self.mutex.release()
+
+    def deleteValue(self, x):
+        self.mutex.acquire()
+        try:
+            nodeid, lamptime = self.getNewLamportTimestamp()
+            event = Event(self.nodeid, (nodeid, lamptime))
+            event._op = Operation.DELETE
+            event._m = x
+            self.events.add(event)
+            # log
+            self.appendToLog(self.dlogfileName, str(event))
+
+            r = self.calendar[x[0]].remove(x[1])
+            # print(r)
+            # log
+            self.appendToLog(self.ddfileName, self.displayCalendarstr(), "w+")
+            pass
         finally:
             self.mutex.release()
 
     def sendMessage(self, k):
         NP = self.calculatePartialLog(k)
-        return NP, self.matrix
+        return NP, self.matrix, self.nodeid
 
     def receiveMessage(self, m):
         # let m be <NP_k, T_k>
@@ -60,46 +123,100 @@ class DistributedDict:
         NE = self.calculateNE(pl)
 
         tempCreateKeyList = {}
-        tempDeleteKeyList = {}
+        tempDeleteKeyLsit = {}
         for e in NE:
-            if e._op == 1:
-                tempCreateKeyList[e._m] = e
-            elif e._op == 2:
-                tempDeleteKeyList[e._m] = e
+            if e._op == Operation.INSERT:
+                if e._m[0] in tempCreateKeyList:
+                    tempCreateKeyList[e._m[0]].append(e._m[1])
+                else:
+                    tempCreateKeyList[e._m[0]] = [e._m[1]]
+            elif e._op == Operation.DELETE:
+                if e._m[0] in tempDeleteKeyLsit:
+                    tempDeleteKeyLsit[e._m[0]].append(e._m[1])
+                else:
+                    tempDeleteKeyLsit[e._m[0]] = [e._m[1]]
 
-        for ck in tempCreateKeyList:
-            if ck not in tempDeleteKeyList:
-                res = self.addAppointment(tempCreateKeyList[ck].nodes, ck, False)
-                # self.calendar[ck] = tempCreateKeyList[ck].nodes
+        # go through the events again one by one
+        for e in NE:
+            if e._op == Operation.INSERT:
+                if e._m[1] not in (tempDeleteKeyLsit[e._m[0]] if e._m[
+                                                                     0] in tempDeleteKeyLsit else []):  # checking insert appointment is not in delete list
+                    if e._m[0] in self.calendar:
+                        self.calendar[e._m[0]].append(e._m[1])
+                    else:
+                        self.calendar[e._m[0]] = [e._m[1]]
+                else:
+                    print(
+                        "Appointment {0} is in create and delete list, therefore it will not be added to the dictionary".format(
+                            e._m[1]))
+                    logging.debug(
+                        "Appointment {0} is in create and delete list, therefore it will not be added to the dictionary".format(
+                            e._m[1]))
+            elif e._op == Operation.DELETE:
+                if e._m[1] not in (tempCreateKeyList[e._m[0]] if e._m[0] in tempCreateKeyList else []):
+                    # we need to delete this value from the dictionary
+                    if e._m[0] in self.calendar:
+                        el = next((x for x in self.calendar[e._m[0]] if x.ts == e._m[1].ts), None)
+                        # we have to do this since when pickling and unpickling hash changes unless we override the hash function
+                        if el is not None:
+                            self.calendar[e._m[0]].remove(el)
+                        else:
+                            print("Couldn't find the appointment to delete")
+                        # make sure to write logic to remove the key if list is empty after this
+                        if not self.calendar[e._m[0]]:
+                            # print("No values for key {0} in the dictionary. Removing the key".format(e._m[0]))
+                            logging.debug("No values for key {0} in the dictionary. Removing the key".format(e._m[0]))
+                            self.calendar.pop(e._m[0])
+                    else:
+                        logging.debug("Delete key not in calendar Error {0}".format(e._m[0]))
 
-        for dk in tempDeleteKeyList:
-            if dk not in tempCreateKeyList:
-                if dk not in self.calendar:
-                    print("Delete key not in calandar Error {0}".format(dk))
-                res = self.cancelAppointment(tempDeleteKeyList[dk].nodes, ck)
-                # self.calendar.pop(dk, None)
+        # for ck in tempCreateKeyList:
+        #     if ck not in tempDeleteKeyLsit:
+        #         if ck in self.calendar:
+        #             self.calendar[ck].append(tempCreateKeyList[ck]._m[1])
+        #         else:
+        #             self.calendar[ck] = [tempCreateKeyList[ck]._m[1]]
+        #     else:
+        #         deleteevents = tempDeleteKeyLsit[ck]
+        #
+        # for dk in tempDeleteKeyLsit:
+        #     if dk not in tempCreateKeyList:
+        #         if dk not in self.calendar:
+        #             print("Delete key not in calandar Error {0}".format(dk))
+        #         self.calendar.pop(dk, None)
+
+        # update the dictionary log
+        self.appendToLog(self.ddfileName, self.displayCalendarstr(), "w+")
 
         # merge the partial logs
         self.updateMatrixFromReceivedMatrix(matrix, k)
-        self.unionevents(pl)
-        for ev in self.log.copy():
+
+        # self.unionevents(NE)
+        copyEvents = self.events.copy()
+        copyEvents.update(NE)
+        for ev in copyEvents.copy():
             needArecord = False
             for j in range(1, self.noOfNodes + 1):
                 if not self.hasRecord(self.matrix, ev, j):
                     needArecord = True
-                    break
-            if needArecord:
-                pass
+            if needArecord:  # if record is needed and in NE, then we need to add to events and log it
+                if ev in NE:
+                    self.events.add(ev)
+                    self.appendToLog(self.dlogfileName, str(ev))
+                    pass
             else:
-                self.log.remove(ev)
-
+                if ev in self.events:  # record is not needed but is in events then remove it from the events
+                    self.events.remove(ev)
+            # else:
+            #     logging.debug("Record not needed and not in events")
 
     def unionevents(self, pl):
         for e in pl:
-            if e not in self.log:
+            if e not in self.events:
                 # add to the events
-                self.log.add(e)
+                self.events.add(e)
                 # log the event
+                self.appendToLog(self.dlogfileName, str(e))
 
     def updateMatrixFromReceivedMatrix(self, receivedMatrix, k):
         i = self.nodeid
@@ -120,7 +237,7 @@ class DistributedDict:
 
     def calculatePartialLog(self, k):
         pl = []
-        for e in self.log:
+        for e in self.events:
             if not self.hasRecord(self.matrix, e, k):
                 pl.append(e)
         return pl
@@ -129,74 +246,204 @@ class DistributedDict:
         return matrix[k - 1][eR.nodeId - 1] >= eR.ts[1]
 
     def getNewLamportTimestamp(self):
-        self.matrix[self.nodeid - 1][self.nodeid - 1] = self.matrix[self.nodeid - 1][self.nodeid - 1] + 1
+        self.matrix[self.nodeid - 1][self.nodeid - 1] = max(self.matrix[self.nodeid - 1]) + 1
         return self.getLamportTime()
 
     def getLamportTime(self):
         return self.nodeid, self.matrix[self.nodeid - 1][self.nodeid - 1]
 
-    def update_matrix(self, size):
-        self.noOfNodes = size
-        self.matrix = np.zeros((self.noOfNodes, self.noOfNodes), dtype=np.int32)
+    def initializeLogFiles(self):
+        with open(self.dlogfileName, "w+") as dl:
+            dl.write("This is the beginning of the Distributed log of node {0}\n".format(self.nodeid))
+
+        with open(self.ddfileName, "w+") as dc:
+            dc.write("This is the beginning of the Distributed Calendar log of node {0}\n".format(self.nodeid))
 
     # High level methods
-    def displayCalendar(self):
-        print("-----------------------")
-        for key, value in self.calendar.items():
-            print("\t"+key+"\t")
-            for appt in value:
-                print(str(appt))
-        print("-----------------------") 
+    def displayCalendarstr(self):
+        weekDays = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+        keys = sorted(self.calendar.keys())
+        appendstr = ""
+        for k in keys:
+            appendstr = appendstr + "Day:Timeslot: {0}:{1} -> ".format(weekDays[k - 1], k)
+            for a in self.calendar[k]:
+                appendstr = appendstr + str(a) + "\t||\t"
+            appendstr = appendstr + "\n"
+        return appendstr
 
-    def addAppointment(self, participants, timeslot, sending = True):
+    def addAppointment(self, message):
         # Todo: implement the add appointment logic here
-        # create the appointment 
-        participants = [int(item) for item in participants]
-        if self.nodeid not in participants:
-            participants.append(self.nodeid)
+        # create the appointment
+
+        timeslot = message[0]
+        scheduler = message[1]
+        participants = message[2]
+        name = message[3]
+        startt = (message[4])
+        endt = (message[5])
+
         appnmnt = Appointment()
         appnmnt.timeslot = timeslot
-        appnmnt.scheduler = self.nodeid
+        appnmnt.scheduler = scheduler
         appnmnt.participants = participants
+        appnmnt.name = name
+        appnmnt.starttime = appnmnt.starttime.replace(hour=startt[0], minute=startt[1])
+        appnmnt.endtime = appnmnt.starttime.replace(hour=endt[0], minute=endt[1])
 
-        if timeslot in self.calendar:
-            flag = True
-            for elem in self.calendar[timeslot]:
-                for participant in participants:
-                    if elem.isParticipant(participant):
-                        if sending:
-                            print("{0} is already booked for timeslot {1}". format(participant, timeslot))
-                            sending =  False
-                        flag = False
-            if flag:  
-                self.calendar[timeslot].append(appnmnt) 
-                self.insert(participants, timeslot)
+        # check whether scheduler is a participant
+        if not (scheduler in participants):
+            print("Scheduler is not a participant. Scheduler must be a participant")
+            logging.debug("Scheduler is not a participant. Scheduler must be a participant")
+            return False
+
+        # check for internal conflicts
+
+        if self.isInternalConflicts(timeslot, scheduler, participants, self.calendar, appnmnt.starttime,
+                                    appnmnt.endtime):
+            print("Appointment conflict for timeslot {0} scheduler {1} participants {2} ".format(timeslot, scheduler,
+                                                                                                 participants))
+            logging.debug(
+                "Appointment conflict for timeslot {0} scheduler {1} participants {2} ".format(timeslot, scheduler,
+                                                                                               participants))
+            return False
         else:
-            self.calendar[timeslot] = [appnmnt]
-            self.insert(participants, timeslot)
+            print("No Internal conflict detected. Moving on to do the schedule the appointment")
+            logging.debug("No Internal conflict detected. Moving on to do the schedule the appointment")
+            # if timeslot is not used then we need to insert the timeslot and send messages
+            if timeslot not in self.calendar:
+                print('Timeslot is not used in the local calendar')
+                self.insert((timeslot, appnmnt))
+            else:
+                print("Timeslot already exist. Moving on to adding non conflicting appointment to the local calendar")
+                logging.debug(
+                    "Timeslot already exist. Moving on to adding non conflicting appointment to the local calendar")
+                self.appendValue((timeslot, appnmnt))
 
-        return sending
+            tempParticipants = participants.copy()
+            tempParticipants.remove(self.nodeid)
 
+            # for each participant send the partial log
+            for p in tempParticipants:
+                (NP, mtx, nid) = self.sendMessage(p)
+                self.sendViaSocket((NP, mtx, nid), p)
+            return True
 
-    def cancelAppointment(self, participants, timeslot):
-        if self.nodeid not in participants:
-            participants.append(self.nodeid)
-        flag = True
-        if timeslot in self.calendar:
-            for elem in self.calendar[timeslot]:
-                for participant in participants:
-                    if not elem.isParticipant(participant):
-                        print("Appointment does no exist")
-                        flag = False
-            if flag:  
-                self.delete(participants, timeslot)
+    def cancelAppointment(self, message):
+        timeslot = message[0]
+        appnmnt = message[1]
+
+        scheduler = appnmnt.scheduler
+        canceler = self.nodeid
+        participants = appnmnt.participants
+        # check whether canceler is a participant
+        if not (canceler in participants):
+            print("Canceler is not an participant of the appointment")
+            logging.debug("Canceler is not an participant of the appointment")
+            return False
         else:
-            flag = False
-            print("Appointment does no exist")
-        return flag
+            # check if it is delete or deletevalue
+            if timeslot not in self.calendar:
+                print("Error! trying to delete appointment at a timeslot that doesn't exist")
+                logging.debug("Error! trying to delete appointment at a timeslot that doesn't exist")
+                return False
+            else:
+                if len(self.calendar[timeslot]) > 1:
+                    self.deleteValue((timeslot, appnmnt))
+                elif len(self.calendar[timeslot]) == 1:
+                    self.delete((timeslot, appnmnt))
 
-    def updateDict(self, events):
+                tempParticipants = participants.copy()
+                tempParticipants.remove(self.nodeid)
+
+                # for each participant send the partial log
+                for p in tempParticipants:
+                    (NP, mtx, nid) = self.sendMessage(p)
+                    self.sendViaSocket((NP, mtx, nid), p)
+
+                return True
         pass
+
+    def updateDict(self, partial_log):
+        pass
+
+    def sendViaSocket(self, m, p):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.connect((self.map[p][0], int(self.map[p][1])))
+
+                strReq = {}
+                strReq['pl'] = m[0]
+                strReq['mtx'] = m[1]
+                strReq['nodeid'] = m[2]
+                # the_encoding = chardet.detect(pickle.dumps(self.events))['encoding']
+                # print(the_encoding)
+                # strReq['encoding'] = the_encoding
+                strReq['msg'] = self.events
+
+                pickledMessage = pickle.dumps(strReq)
+                s.sendall(pickledMessage)
+            except ConnectionRefusedError:
+                print("Connection cannot be established to node {0}".format(p))
+                logging.error("Connection cannot be established to node {0}".format(p))
+
+    def isInternalConflicts(self, timeslot, scheduler, participants, calendar, st, et):
+        if timeslot not in self.calendar:
+            return False
+        else:
+            appnmnts = self.calendar[timeslot]
+            for a in appnmnts:
+                for p in participants:
+                    if a.isParticipant(p) and a.checkappttimeconflicts(st, et):
+                        return True
+        return False
+
+    def checkConflictingAppnmts(self):
+        conflicts = []
+        for k, v in self.calendar.items():
+            conflicts.extend(self.checkConflictsInaTimeSlot(k, v))
+        return conflicts
+
+    def checkConflictsInaTimeSlot(self, k, appnmts):
+        apps = appnmts.copy()
+        apps.sort(key=lambda x: x.ts)
+        conflictingAppointments = []
+        for i in range(len(apps)):
+            # print(apps[i].participants)
+            if apps[i] in conflictingAppointments:
+                continue
+            for j in range(i + 1, len(apps)):
+                # print(apps[j].participants)
+                if apps[j] not in conflictingAppointments:
+                    if any(item in apps[i].participants for item in apps[j].participants) and apps[
+                        i].checkappttimeconflicts(apps[j].starttime, apps[j].endtime):
+                        conflictingAppointments.append(apps[j])
+
+        # for c in conflictingAppointments:
+        #     print(c)
+        return conflictingAppointments
+
+    def appendToLog(self, logname, line, format="a+"):
+        with open(logname, format) as f:
+            try:
+                f.write(line + "\n")
+            except:
+                print("Error writing to the logfile {0} line {1}".format(logname, line))
+                logging.error("Error writing to the logfile {0} line {1}".format(logname, line))
+
+    def displayCalendar(self):
+        weekDays = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+        print(
+            "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+        print("Displaying the calendar of Node {0}".format(self.nodeid))
+        keys = sorted(self.calendar.keys())
+        for k in keys:
+            print("Day:Timeslot: {0}:{1} -> ".format(weekDays[k - 1], k), end='')
+            for a in self.calendar[k]:
+                print(str(a) + "\t||\t", end='')
+            print("")
+
+        print(
+            "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
 
 
 class Appointment:
@@ -204,6 +451,11 @@ class Appointment:
         self.timeslot = None
         self.scheduler = None
         self.participants = []
+        self.ts = None
+        self.name = ""
+        self.dateoftheappointment = None
+        self.starttime = datetime.time(0, 0, 0)
+        self.endtime = datetime.time(0, 0, 0)
 
     def isParticipant(self, participant):
         return participant in self.participants
@@ -211,30 +463,28 @@ class Appointment:
     def isScheduler(self, schedulerperson):
         return self.scheduler == schedulerperson
 
-    def __str__(self):
-        return "Timeslot: {0} scheduled by: {1} participants {2}".format(self.timeslot, len(self.participants), self.participants)
+    def calculatedatestartandend(self):
+        weekDays = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+        day = self.timeslot - 1
+        self.dateoftheappointment = weekDays[day]
 
-
-class Event:
-
-    def __init__(self, nodes, nodeid=1, timestamp=(0, 0)):
-        hash = hashlib.sha1()
-        hash.update(str(time.time_ns()).encode('utf-8') + str(random.randint(1, 1000000)).encode('utf-8'))
-        self.id = hash.hexdigest()
-        self.nodeId = nodeid
-        self.nodes = nodes
-        self.ts = timestamp
-        self._op = None
-        self._m = None
-
-    def __hash__(self):
-        return hash(self.id)
-
-    def __eq__(self, other):
-        if isinstance(other, Event):
-            return hash(self.id) == hash(other)
+    def checkappttimeconflicts(self, st, et):
+        if (self.starttime <= st <= self.endtime) or (self.starttime <= et <= self.endtime):
+            print("Appointment time conflict (intersection) detected")
+            logging.debug("Appointment time conflict (intersection) detected")
+            return True
+        elif (st < self.starttime) and (self.endtime < et):
+            print("Appointment time conflict (overlap) detected")
+            logging.debug("Appointment time conflict (overlap) detected")
+            return True
         return False
 
     def __str__(self):
-        return "Event Hash: {0} Nodes:{1} Timestamp: {2} Op: {3} Slot:{4}".format(self.id, self.nodes, self.ts, self._op, self._m)
-
+        self.calculatedatestartandend()
+        return "Timeslot: {0} scheduled by: {1}  Name: {2} participants {3}, Day-Time: {4} at {5} to {6}".format(
+            self.timeslot,
+            self.scheduler,
+            self.name,
+            self.participants,
+            self.dateoftheappointment,
+            self.starttime, self.endtime)

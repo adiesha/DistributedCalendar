@@ -198,15 +198,12 @@ class DistributedLog:
         return NE
 
 
-
 class Event:
 
     def __init__(self, nodeid=1, timestamp=(0, 0)):
         hash = hashlib.sha1()
         hash.update(str(time.time_ns()).encode('utf-8') + str(random.randint(1, 1000000)).encode('utf-8'))
         self.id = hash.hexdigest()
-        print(self.id)
-        print(type(self.id))
         self.nodeId = nodeid
         self.ts = timestamp
         self._op = None
@@ -221,12 +218,14 @@ class Event:
         return False
 
     def __str__(self):
-        return "Event Hash: {0} Node:{1} Timestamp: {2} Op: {3}".format(self.id, self.nodeId, self.ts, self._op)
+        return "Event Hash: {0} Node:{1} Timestamp: {2} Op: {3} message: {4}".format(self.id, self.nodeId, self.ts,
+                                                                                     self._op, self._m[1])
 
 
 class Operation(Enum):
     INSERT = 1
     DELETE = 2
+
 
 # test class for hashing in set
 class Apple:
